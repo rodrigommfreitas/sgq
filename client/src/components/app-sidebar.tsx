@@ -90,7 +90,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="4.1. Análise SWOT">
-                <Link to="#">
+                <Link to="/analise-swot">
                   <Activity />
                   <span>4.1. Análise SWOT</span>
                 </Link>

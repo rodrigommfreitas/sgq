@@ -17,6 +17,11 @@ import type {
   CreateInterestedPartyRequest,
   UpdateInterestedPartyRequest,
   ProcessOptionResponse,
+  SwotAnalysisResponse,
+  SwotYearDetail,
+  SwotItemResponse,
+  CreateSwotItemRequest,
+  UpdateSwotItemRequest,
 } from "@/types.ts";
 
 export const getMacroProcessHierarchy = async (yearId: number): Promise<ProcessHierarchyResponse> => {
@@ -356,4 +361,55 @@ export const uploadInterestedPartyEvidence = async (
   await api.post(`/interested-parties/${interestedPartyYearId}/document`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+};
+
+/* SWOT ANALYSIS (4.1) */
+
+export const getSwotAnalysis = async (): Promise<SwotAnalysisResponse> => {
+  const res = await api.get("/swot-analysis");
+  return res.data;
+};
+
+export const updateSwotAnalysis = async (description: string): Promise<SwotAnalysisResponse> => {
+  const res = await api.patch("/swot-analysis", { description });
+  return res.data;
+};
+
+export const getSwotYearDetail = async (yearId: number): Promise<SwotYearDetail> => {
+  const res = await api.get(`/swot-analysis/year/${yearId}`);
+  return res.data;
+};
+
+export const createSwotItem = async (data: CreateSwotItemRequest): Promise<SwotItemResponse> => {
+  const res = await api.post("/swot-analysis/items", data);
+  return res.data;
+};
+
+export const updateSwotItem = async (itemId: number, text: string): Promise<SwotItemResponse> => {
+  const res = await api.patch(`/swot-analysis/items/${itemId}`, { text });
+  return res.data;
+};
+
+export const deleteSwotItem = async (itemId: number): Promise<void> => {
+  await api.delete(`/swot-analysis/items/${itemId}`);
+};
+
+export const uploadSwotDocument = async (file: File, uploadedById: number): Promise<void> => {
+  const formData = new FormData();
+  const data = JSON.stringify({
+    documentId: null,
+    versioned: false,
+    version: 1,
+    requiresApproval: false,
+    uploadedById,
+  });
+  formData.append("data", new Blob([data], { type: "application/json" }));
+  formData.append("file", file);
+  await api.post("/swot-analysis/documents", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+};
+
+export const deleteSwotDocument = async (documentId: number): Promise<void> => {
+  await api.delete(`/swot-analysis/documents/${documentId}`);
 };

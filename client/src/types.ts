@@ -230,6 +230,50 @@ export interface AwarenessResponse {
   years: AwarenessYearDetail[];
 }
 
+/* SWOT ANALYSIS (4.1) */
+
+export type SwotItemType = "STRENGTH" | "WEAKNESS" | "OPPORTUNITY" | "THREAT";
+
+export interface SwotYearSummary {
+  swotYearId: number;
+  yearId: number;
+  year: number;
+}
+
+export interface SwotItemResponse {
+  id: number;
+  text: string;
+  type: SwotItemType;
+  years: SwotYearSummary[];
+}
+
+export interface SwotYearDetail {
+  swotYearId: number;
+  yearId: number;
+  year: number;
+  strengths: SwotItemResponse[];
+  weaknesses: SwotItemResponse[];
+  opportunities: SwotItemResponse[];
+  threats: SwotItemResponse[];
+}
+
+export interface SwotAnalysisResponse {
+  id: number;
+  description: string | null;
+  documents: DocumentWithVersionsResponse[];
+  years: SwotYearSummary[];
+}
+
+export interface CreateSwotItemRequest {
+  text: string;
+  type: SwotItemType;
+  yearIds: number[];
+}
+
+export interface UpdateSwotItemRequest {
+  text: string;
+}
+
 /* CHANGE (6.3) */
 
 export type ChangeStatus = "INITIATED" | "IN_PROGRESS" | "FINISHED" | "CANCELLED";

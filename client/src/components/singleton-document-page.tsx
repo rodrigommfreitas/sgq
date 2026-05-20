@@ -87,7 +87,12 @@ interface SingletonDocumentPageProps {
   queryKey: string[];
   fetchFn: () => Promise<SingletonDocumentResponse>;
   updateFn: (data: { description: string }) => Promise<SingletonDocumentResponse>;
-  uploadFn: (file: File, version: number, uploadedById: number, existingDocumentId?: number | null) => Promise<SingletonDocumentResponse>;
+  uploadFn: (
+    file: File,
+    version: number,
+    uploadedById: number,
+    existingDocumentId?: number | null
+  ) => Promise<SingletonDocumentResponse>;
 }
 
 export function SingletonDocumentPage({
@@ -192,7 +197,7 @@ export function SingletonDocumentPage({
   };
 
   const currentApprovedVersion = data?.document?.versions?.find(
-    (v: DocumentVersionResponse) => v.status === "APPROVED",
+    (v: DocumentVersionResponse) => v.status === "APPROVED"
   );
 
   if (isLoading) {
@@ -274,7 +279,9 @@ export function SingletonDocumentPage({
                     <div>
                       <span className="text-muted-foreground">Ficheiro:</span>{" "}
                       <span className="font-medium">
-                        {currentApprovedVersion.fileName ? stripUuidSuffix(currentApprovedVersion.fileName) : "—"}
+                        {currentApprovedVersion.fileName
+                          ? stripUuidSuffix(currentApprovedVersion.fileName)
+                          : "—"}
                       </span>
                     </div>
                     <div>
@@ -298,7 +305,10 @@ export function SingletonDocumentPage({
                 <h3 className="text-sm font-medium text-muted-foreground">Histórico de Versões</h3>
                 <div className="space-y-2">
                   {[...(data.document.versions ?? [])]
-                    .sort((a: DocumentVersionResponse, b: DocumentVersionResponse) => b.version - a.version)
+                    .sort(
+                      (a: DocumentVersionResponse, b: DocumentVersionResponse) =>
+                        b.version - a.version
+                    )
                     .map((v: DocumentVersionResponse) => (
                       <div
                         key={v.versionId}
@@ -319,7 +329,8 @@ export function SingletonDocumentPage({
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground">
-                            {v.uploadedBy?.firstName} {v.uploadedBy?.lastName} · {formatDate(v.uploadedAt)}
+                            {v.uploadedBy?.firstName} {v.uploadedBy?.lastName} ·{" "}
+                            {formatDate(v.uploadedAt)}
                           </span>
                           {v.downloadUrl && (
                             <Button
@@ -377,7 +388,7 @@ export function SingletonDocumentPage({
                 id="description"
                 className="flex min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none resize-y"
                 value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
+                onChange={e => setEditDescription(e.target.value)}
                 placeholder={descriptionPlaceholder}
               />
             </div>
@@ -397,9 +408,7 @@ export function SingletonDocumentPage({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nova Versão do Documento</DialogTitle>
-            <DialogDescription>
-              Carregue uma nova versão do documento.
-            </DialogDescription>
+            <DialogDescription>Carregue uma nova versão do documento.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -410,7 +419,7 @@ export function SingletonDocumentPage({
                 min={1}
                 step={1}
                 value={uploadVersion}
-                onChange={(e) => setUploadVersion(Number(e.target.value))}
+                onChange={e => setUploadVersion(Number(e.target.value))}
               />
             </div>
             <div className="grid gap-2">
@@ -418,7 +427,7 @@ export function SingletonDocumentPage({
               <Input
                 id="file"
                 type="file"
-                onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                onChange={e => setUploadFile(e.target.files?.[0] ?? null)}
               />
             </div>
           </div>
@@ -426,10 +435,7 @@ export function SingletonDocumentPage({
             <DialogClose asChild>
               <Button variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button
-              onClick={handleUploadSubmit}
-              disabled={!uploadFile || uploadMutation.isPending}
-            >
+            <Button onClick={handleUploadSubmit} disabled={!uploadFile || uploadMutation.isPending}>
               <Upload className="size-4" />
               {uploadMutation.isPending ? "A carregar..." : "Carregar"}
             </Button>
@@ -439,3 +445,363 @@ export function SingletonDocumentPage({
     </div>
   );
 }
+
+/*
+
+import React, { useState } from 'react';
+import { 
+  FileSearch, 
+  History, 
+  CheckCircle2, 
+  Clock, 
+  FileText, 
+  Upload, 
+  Save, 
+  Plus, 
+  ShieldCheck,
+  AlertCircle,
+  ExternalLink
+} from 'lucide-react';
+import { AppState, QMSScope, QMSScopeVersion } from './types';
+import { Action } from './App';
+
+interface QMSScopePageProps {
+  state: AppState;
+  dispatch: React.Dispatch<Action>;
+  currentUser: string;
+}
+
+export const QMSScopePage: React.FC<QMSScopePageProps> = ({ state, dispatch, currentUser }) => {
+  const { qmsScope } = state;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(qmsScope.currentContent);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [newVersionLabel, setNewVersionLabel] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isVersionDialogOpen, setIsVersionDialogOpen] = useState(false);
+
+  const handleSave = () => {
+    dispatch({ type: 'UPDATE_QMS_SCOPE', content: editContent, user: currentUser });
+    setIsEditing(false);
+  };
+
+  const handleCreateVersion = () => {
+    if (!newVersionLabel) return;
+    dispatch({ 
+      type: 'CREATE_QMS_SCOPE_VERSION', 
+      version: newVersionLabel, 
+      content: qmsScope.currentContent,
+      documentName: selectedFile?.name,
+      user: currentUser 
+    });
+    setIsVersionDialogOpen(false);
+    setNewVersionLabel('');
+    setSelectedFile(null);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
+
+  const approvedVersion = qmsScope.versions.find(v => v.status === 'Approved');
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-primary/10 text-primary rounded-xl flex items-center justify-center shadow-sm">
+            <FileSearch size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">QMS Scope</h1>
+            <p className="text-muted-foreground text-sm mt-1">Define and maintain the scope of the Quality Management System.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowVersionHistory(!showVersionHistory)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all border ${
+              showVersionHistory ? 'bg-foreground text-background border-foreground' : 'bg-card text-foreground border-border hover:bg-muted'
+            }`}
+          >
+            <History size={18} />
+            {showVersionHistory ? 'View Content' : 'Version History'}
+          </button>
+          {!showVersionHistory && (
+            <button 
+              onClick={() => setIsVersionDialogOpen(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg font-bold text-sm hover:bg-primary/90 transition-all shadow-sm"
+            >
+              <Plus size={18} />
+              Create Version
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showVersionHistory ? (
+        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4">Controlled Document Versions</h3>
+          {qmsScope.versions.map((v) => (
+            <div key={v.id} className="bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-all">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-4">
+                  <div className={`p-2 rounded-lg ${v.status === 'Approved' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <h4 className="font-bold text-slate-900 text-lg">Version {v.version}</h4>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        v.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}>
+                        {v.status}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <div className="flex items-center gap-1">
+                        <Clock size={12} />
+                        Created: {new Date(v.createdAt).toLocaleDateString()} by {v.createdBy}
+                      </div>
+                      {v.status === 'Approved' && (
+                        <div className="flex items-center gap-1 text-emerald-600 font-medium">
+                          <ShieldCheck size={12} />
+                          Approved: {new Date(v.approvedAt!).toLocaleDateString()} by {v.approvedBy}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {v.documentName && (
+                    <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors border border-slate-200">
+                      <ExternalLink size={14} />
+                      {v.documentName}
+                    </button>
+                  )}
+                  {v.status === 'Draft' && (
+                    <button 
+                      onClick={() => dispatch({ type: 'APPROVE_QMS_SCOPE_VERSION', versionId: v.id, user: currentUser })}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"
+                    >
+                      <CheckCircle2 size={14} />
+                      Approve
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4 p-4 bg-slate-50 rounded-lg border border-slate-100 text-sm text-slate-600 italic">
+                {v.content}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText size={18} className="text-slate-400" />
+                <h3 className="font-bold text-slate-800">Scope Definition</h3>
+              </div>
+              {!isEditing ? (
+                <button 
+                  onClick={() => setIsEditing(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 uppercase tracking-wider"
+                >
+                  Edit Content
+                </button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => {
+                      setIsEditing(false);
+                      setEditContent(qmsScope.currentContent);
+                    }}
+                    className="text-xs font-bold text-slate-400 hover:text-slate-500 uppercase tracking-wider"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSave}
+                    className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1 rounded-md text-xs font-bold hover:bg-blue-700 transition-all"
+                  >
+                    <Save size={14} />
+                    Save
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="p-8">
+              {isEditing ? (
+                <textarea 
+                  className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all leading-relaxed"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                />
+              ) : (
+                <div className="prose prose-slate max-w-none">
+                  <p className="text-slate-700 leading-relaxed text-lg whitespace-pre-wrap">
+                    {qmsScope.currentContent}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Upload size={14} />
+                Controlled Documents
+              </h3>
+              {approvedVersion?.documentName ? (
+                <div className="p-6 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center text-slate-400 group-hover:text-blue-500 transition-colors shadow-sm border border-slate-100">
+                      <FileText size={24} />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-slate-800">{approvedVersion.documentName}</p>
+                      <p className="text-xs text-slate-400">Formal Scope Document • PDF</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button className="flex items-center gap-2 px-4 py-2 bg-white text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-100 transition-all border border-slate-200 shadow-sm">
+                      <ExternalLink size={16} />
+                      Download
+                    </button>
+                    <button 
+                      onClick={() => setIsVersionDialogOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-all shadow-md"
+                    >
+                      <Upload size={16} />
+                      Update Document
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-xl">
+                  <Upload className="mx-auto text-slate-200 mb-3" size={32} />
+                  <p className="text-sm text-slate-500 font-medium">No controlled document attached to this version</p>
+                  <p className="text-xs text-slate-400 mt-1 mb-6">Upload a formal document to create a new controlled version</p>
+                  <button 
+                    onClick={() => setIsVersionDialogOpen(true)}
+                    className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
+                  >
+                    <Upload size={18} />
+                    Upload Scope File
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <ShieldCheck size={14} />
+                Current Status
+              </h3>
+              {approvedVersion ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 p-3 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">
+                    <CheckCircle2 size={20} />
+                    <div>
+                      <p className="text-sm font-bold">Approved Version {approvedVersion.version}</p>
+                      <p className="text-[10px] uppercase tracking-wider opacity-80">Controlled Document</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Approved by:</span>
+                      <span className="text-slate-700 font-medium">{approvedVersion.approvedBy}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Date:</span>
+                      <span className="text-slate-700 font-medium">{new Date(approvedVersion.approvedAt!).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 bg-amber-50 text-amber-700 rounded-xl border border-amber-100">
+                  <AlertCircle size={20} />
+                  <div>
+                    <p className="text-sm font-bold">No Approved Version</p>
+                    <p className="text-[10px] uppercase tracking-wider opacity-80">Draft Mode</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isVersionDialogOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Create Controlled Version</h2>
+            <p className="text-slate-500 text-sm mb-6">This will create a draft version of the current scope for formal approval.</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Version Label</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. 1.1, 2.0..." 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+                  value={newVersionLabel}
+                  onChange={(e) => setNewVersionLabel(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Attach Document (Optional)</label>
+                <div className="relative">
+                  <input 
+                    type="file" 
+                    id="scope-file-upload"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <label 
+                    htmlFor="scope-file-upload"
+                    className="flex items-center justify-between w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm cursor-pointer hover:bg-slate-100 transition-all"
+                  >
+                    <span className={selectedFile ? 'text-slate-900 font-medium' : 'text-slate-400'}>
+                      {selectedFile ? selectedFile.name : 'Select PDF or Word file...'}
+                    </span>
+                    <Upload size={16} className="text-slate-400" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  onClick={() => {
+                    setIsVersionDialogOpen(false);
+                    setSelectedFile(null);
+                    setNewVersionLabel('');
+                  }}
+                  className="flex-1 px-4 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all text-sm"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleCreateVersion}
+                  disabled={!newVersionLabel}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-200"
+                >
+                  Create Draft
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+*/

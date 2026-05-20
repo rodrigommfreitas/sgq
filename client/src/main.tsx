@@ -26,6 +26,7 @@ import LeadershipCommitmentPage from "./pages/leadership-commitment/leadership-c
 import AwarenessPage from "./pages/awareness/awareness-page";
 import ChangesPage from "./pages/changes/changes-page";
 import InterestedPartiesPage from "./pages/interested-parties/interested-parties-page";
+import SwotAnalysisPage from "./pages/swot/swot-page";
 
 // eslint-disable-next-line react-refresh/only-export-components
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
@@ -135,6 +136,14 @@ const router = createBrowserRouter(
           handle={{
             group: "4. Contexto da Organização",
             breadcrumb: () => "4.2. Partes Interessadas",
+          }}
+        />
+        <Route
+          path="analise-swot"
+          element={<SwotAnalysisPage />}
+          handle={{
+            group: "4. Contexto da Organização",
+            breadcrumb: () => "4.1. Análise SWOT",
           }}
         />
         <Route
