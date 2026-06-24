@@ -1,19 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  getYears,
   getSwotAnalysis,
   updateSwotAnalysis,
   getSwotYearDetail,
   createSwotItem,
   updateSwotItem,
   deleteSwotItem,
+  updateSwotItemYears,
   uploadSwotDocument,
   deleteSwotDocument,
   downloadDocumentVersion,
 } from "@/api/core";
 import type { SwotItemType, SwotItemResponse, SwotYearDetail } from "@/types";
 import { YearSelector } from "@/components/year-selector";
+import YearAssociationDialog from "@/components/year-association-dialog";
+import ConfirmDialog from "@/components/confirm-dialog";
+import { LogDialog } from "@/components/log-dialog";
+import type { EntityType } from "@/types";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth } from "@/context/auth-context";
 import {
@@ -28,7 +43,18 @@ import {
   Upload,
   Download,
   Save,
+  Calendar,
+  Activity,
+  History,
+  MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 const QUADRANT_CONFIG: {
   type: SwotItemType;
@@ -67,7 +93,10 @@ const QUADRANT_CONFIG: {
   },
 ];
 
-const colorMap: Record<string, { border: string; text: string; bg: string; bgLight: string; dot: string }> = {
+const colorMap: Record<
+  string,
+  { border: string; text: string; bg: string; bgLight: string; dot: string }
+> = {
   emerald: {
     border: "border-emerald-200",
     text: "text-emerald-600",
@@ -101,15 +130,19 @@ const colorMap: Record<string, { border: string; text: string; bg: string; bgLig
 function getItems(yearDetail: SwotYearDetail | undefined, type: SwotItemType): SwotItemResponse[] {
   if (!yearDetail) return [];
   switch (type) {
-    case "STRENGTH": return yearDetail.strengths;
-    case "WEAKNESS": return yearDetail.weaknesses;
-    case "OPPORTUNITY": return yearDetail.opportunities;
-    case "THREAT": return yearDetail.threats;
+    case "STRENGTH":
+      return yearDetail.strengths;
+    case "WEAKNESS":
+      return yearDetail.weaknesses;
+    case "OPPORTUNITY":
+      return yearDetail.opportunities;
+    case "THREAT":
+      return yearDetail.threats;
   }
 }
 
 export default function SwotAnalysisPage() {
-  const { user } = useAuth();
+  const { user, isExternal } = useAuth();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"matrix" | "documents">("matrix");
@@ -122,17 +155,29 @@ export default function SwotAnalysisPage() {
   const [editText, setEditText] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editingDescription, setEditingDescription] = useState(false);
+  const [yearAssociateItemId, setYearAssociateItemId] = useState<number | null>(null);
+  const [swotAssociatedYearIds, setSwotAssociatedYearIds] = useState<Set<number>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: "document" | "item";
+    id: number;
+  } | null>(null);
+  const [pageLogOpen, setPageLogOpen] = useState(false);
 
   const { data: swotAnalysis } = useQuery({
     queryKey: ["swot-analysis"],
     queryFn: getSwotAnalysis,
   });
 
-  const latestSwotYear = swotAnalysis?.years?.length
-    ? [...swotAnalysis.years].sort((a, b) => b.year - a.year)[0]
-    : null;
+  const { data: allYears } = useQuery({ queryKey: ["years"], queryFn: getYears });
+  const effectiveYearId = selectedYearId;
 
-  const effectiveYearId = selectedYearId ?? latestSwotYear?.yearId ?? null;
+  useEffect(() => {
+    if (selectedYearId !== null) return;
+    if (!allYears || allYears.length === 0) return;
+    const currentYearVal = new Date().getFullYear();
+    const match = allYears.find(y => y.year === currentYearVal) ?? allYears[0];
+    setSelectedYearId(match.id);
+  }, [selectedYearId, allYears]);
 
   const { data: yearDetail } = useQuery({
     queryKey: ["swot-year-detail", effectiveYearId],
@@ -212,6 +257,31 @@ export default function SwotAnalysisPage() {
     },
   });
 
+  const associateYearsMutation = useMutation({
+    mutationFn: ({
+      itemId,
+      associateYearIds,
+      disassociateYearIds,
+    }: {
+      itemId: number;
+      associateYearIds: number[];
+      disassociateYearIds: number[];
+    }) => updateSwotItemYears(itemId, associateYearIds, disassociateYearIds),
+    onSuccess: (_data, variables) => {
+      toast.success("Anos associados com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["swot-year-detail", effectiveYearId] });
+      setSwotAssociatedYearIds(prev => {
+        const next = new Set(prev);
+        variables.associateYearIds.forEach(yid => next.add(yid));
+        variables.disassociateYearIds.forEach(yid => next.delete(yid));
+        return next;
+      });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? "Erro ao associar anos");
+    },
+  });
+
   const handleStartEdit = (item: SwotItemResponse) => {
     setEditItemId(item.id);
     setEditText(item.text);
@@ -249,35 +319,39 @@ export default function SwotAnalysisPage() {
   const threats = getItems(yearDetail, "THREAT");
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="py-8 w-full max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">
-            <Target size={24} />
+          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary shrink-0 shadow-sm">
+            <Activity size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Análise SWOT</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Ferramenta de planeamento estratégico para análise do ambiente interno e externo.
+            <h1 className="text-2xl font-bold text-foreground">Análise SWOT</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Planeamento estratégico para análise do ambiente interno e externo.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <YearSelector
-            selectedYearId={effectiveYearId}
-            onYearChange={setSelectedYearId}
-          />
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPageLogOpen(true)}
+            className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all cursor-pointer"
+            title="Histórico de alterações"
+          >
+            <History size={20} />
+          </button>
+          <YearSelector selectedYearId={effectiveYearId} onYearChange={setSelectedYearId} />
+          <div className="flex bg-muted p-0.5 rounded-lg border border-border gap-0.5">
             <button
               onClick={() => setActiveTab("matrix")}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "matrix" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`px-4 h-8 rounded-md text-sm font-bold transition-all ${activeTab === "matrix" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               Matriz
             </button>
             <button
               onClick={() => setActiveTab("documents")}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === "documents" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              className={`px-4 h-8 rounded-md text-sm font-bold transition-all ${activeTab === "documents" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               Documentos
             </button>
@@ -289,7 +363,7 @@ export default function SwotAnalysisPage() {
         <div className="space-y-8">
           {/* Matrix Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {QUADRANT_CONFIG.map((config) => {
+            {QUADRANT_CONFIG.map(config => {
               const items = getItems(yearDetail, config.type);
               const colors = colorMap[config.color];
               const Icon = config.icon;
@@ -297,46 +371,50 @@ export default function SwotAnalysisPage() {
                 <div
                   key={config.type}
                   onClick={() => setExpandedQuadrant(config.type)}
-                  className={`group flex flex-col h-full rounded-2xl border-2 border-dashed ${colors.border} p-6 bg-white/50 cursor-pointer hover:bg-white hover:border-solid transition-all relative overflow-hidden`}
+                  className={`group flex flex-col h-full rounded-2xl border-2 border-dashed ${colors.border} p-6 bg-card/50 cursor-pointer hover:bg-card hover:border-solid transition-all relative overflow-hidden`}
                 >
                   <div className="flex items-center justify-between mb-4 relative z-10">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm bg-white ${colors.text}`}>
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm bg-card ${colors.text}`}
+                      >
                         <Icon size={20} />
                       </div>
                       <div>
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-0.5">
                           {config.category}
                         </p>
-                        <h3 className="font-bold text-slate-800 uppercase tracking-wider leading-none">
+                        <h3 className="font-bold text-foreground uppercase tracking-wider leading-none">
                           {config.label}
                         </h3>
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenAdd(config.type);
-                      }}
-                      className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 hover:border-slate-900 transition-all shadow-sm"
-                    >
-                      <PlusIcon size={18} />
-                    </button>
+                    {!isExternal && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          handleOpenAdd(config.type);
+                        }}
+                        className="w-8 h-8 rounded-lg bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground transition-all shadow-sm"
+                      >
+                        <PlusIcon size={18} />
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex-1 flex flex-col justify-center items-center py-4 relative z-10">
-                    <div className="text-4xl font-black text-slate-900 mb-2">{items.length}</div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <div className="text-4xl font-black text-foreground mb-2">{items.length}</div>
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                       Fatores Identificados
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between relative z-10">
+                  <div className="mt-4 pt-4 border-t border-border flex items-center justify-between relative z-10">
                     <div className="flex -space-x-2 overflow-hidden">
                       {items.slice(0, 3).map((item, i) => (
                         <div
                           key={item.id}
-                          className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
+                          className="w-6 h-6 rounded-full border-2 border-card flex items-center justify-center text-[8px] font-bold text-white shadow-sm"
                           style={{
                             backgroundColor: i === 0 ? "#10b981" : i === 1 ? "#ef4444" : "#3b82f6",
                             zIndex: 10 - i,
@@ -346,12 +424,12 @@ export default function SwotAnalysisPage() {
                         </div>
                       ))}
                       {items.length > 3 && (
-                        <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-600 shadow-sm">
+                        <div className="w-6 h-6 rounded-full border-2 border-card bg-muted flex items-center justify-center text-[8px] font-bold text-muted-foreground shadow-sm">
                           +{items.length - 3}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase group-hover:text-slate-900 transition-colors">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase group-hover:text-foreground transition-colors">
                       Ver Detalhes
                     </div>
                   </div>
@@ -365,16 +443,18 @@ export default function SwotAnalysisPage() {
           </div>
 
           {/* Description */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Descrição</h3>
-              {!editingDescription && (
+              <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
+                Descrição
+              </h3>
+              {!editingDescription && !isExternal && (
                 <button
                   onClick={() => {
                     setEditDescription(swotAnalysis?.description ?? "");
                     setEditingDescription(true);
                   }}
-                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors"
+                  className="text-xs font-bold text-primary hover:text-primary/80 transition-colors"
                 >
                   Editar
                 </button>
@@ -383,10 +463,10 @@ export default function SwotAnalysisPage() {
             {editingDescription ? (
               <div className="space-y-3">
                 <textarea
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+                  className="w-full px-4 py-3 bg-muted border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
                   rows={3}
                   value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
+                  onChange={e => setEditDescription(e.target.value)}
                   placeholder="Descreva o contexto da análise SWOT..."
                 />
                 <div className="flex gap-2">
@@ -398,43 +478,43 @@ export default function SwotAnalysisPage() {
                     <Save size={14} className="mr-1" />
                     Guardar
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditingDescription(false)}
-                  >
+                  <Button size="sm" variant="outline" onClick={() => setEditingDescription(false)}>
                     Cancelar
                   </Button>
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed">
                 {swotAnalysis?.description || "Sem descrição definida."}
               </p>
             )}
           </div>
 
           {/* Summary Bar */}
-          <div className="bg-slate-900 rounded-2xl p-8 text-white flex flex-wrap items-center justify-between gap-8">
+          <div className="bg-card rounded-2xl border border-border p-6 flex flex-wrap items-center justify-between gap-6">
             <div className="flex items-center gap-6">
               <div className="flex flex-col">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">
+                <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest mb-1">
                   Análise Interna
                 </span>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-sm font-bold">{strengths.length} Forças</span>
+                    <span className="text-sm font-bold text-foreground">
+                      {strengths.length} Forças
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-rose-400" />
-                    <span className="text-sm font-bold">{weaknesses.length} Fraquezas</span>
+                    <span className="text-sm font-bold text-foreground">
+                      {weaknesses.length} Fraquezas
+                    </span>
                   </div>
                 </div>
               </div>
-              <div className="w-px h-10 bg-slate-800" />
+              <div className="w-px h-10 bg-border" />
               <div className="flex flex-col">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1">
+                <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-widest mb-1">
                   Análise Externa
                 </span>
                 <div className="flex items-center gap-4">
@@ -451,8 +531,8 @@ export default function SwotAnalysisPage() {
             </div>
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <p className="text-xs text-slate-400">Total de Fatores</p>
-                <p className="text-sm font-bold">
+                <p className="text-xs text-muted-foreground">Total de Fatores</p>
+                <p className="text-sm font-bold text-foreground">
                   {strengths.length + weaknesses.length + opportunities.length + threats.length}
                 </p>
               </div>
@@ -464,54 +544,59 @@ export default function SwotAnalysisPage() {
       {activeTab === "documents" && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">
               Documentos da Análise SWOT
             </h3>
-            <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all text-sm shadow-lg shadow-indigo-200">
-              <Upload size={16} />
-              Carregar Documento
-              <input
-                type="file"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadDocMutation.mutate(file);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+            {!isExternal && (
+              <label className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground font-bold rounded-xl hover:bg-primary/90 transition-all text-sm shadow-lg shadow-primary/20">
+                <Upload size={16} />
+                Carregar Documento
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadDocMutation.mutate(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            )}
           </div>
 
           {documents.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-              <FileText size={48} className="mx-auto text-slate-200 mb-4" />
-              <h3 className="text-lg font-bold text-slate-400">Nenhum documento</h3>
-              <p className="text-slate-400 text-sm mt-1">
+            <div className="bg-card border border-border rounded-2xl p-12 text-center shadow-sm">
+              <FileText size={48} className="mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-bold text-muted-foreground">Nenhum documento</h3>
+              <p className="text-muted-foreground text-sm mt-1">
                 Carregue documentos relacionados com a análise SWOT.
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {documents.map((doc) => {
+              {documents.map(doc => {
                 const latest = doc.versions?.[doc.versions.length - 1];
                 return (
                   <div
                     key={doc.documentId}
-                    className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between shadow-sm"
+                    className="bg-card border border-border rounded-xl p-4 flex items-center justify-between shadow-sm"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-muted-foreground">
                         <FileText size={20} />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-800">
+                        <p className="text-sm font-bold text-foreground">
                           {latest?.fileName
                             ? latest.fileName.replace(/_[0-9a-f-]{36}\./, ".")
                             : "Documento"}
                         </p>
                         {latest && (
-                          <p className="text-xs text-slate-400">
-                            v{latest.version} · {new Date(latest.uploadedAt).toLocaleDateString("pt-PT")}
+                          <p className="text-xs text-muted-foreground">
+                            {latest.uploadedBy
+                              ? `${latest.uploadedBy.firstName} ${latest.uploadedBy.lastName} · `
+                              : ""}
+                            {new Date(latest.uploadedAt).toLocaleDateString("pt-PT")}
                           </p>
                         )}
                       </div>
@@ -520,23 +605,21 @@ export default function SwotAnalysisPage() {
                       {latest && (
                         <button
                           onClick={() => handleDownload(latest.versionId, latest.fileName)}
-                          className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                          className="p-2 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                           title="Descarregar"
                         >
                           <Download size={18} />
                         </button>
                       )}
-                      <button
-                        onClick={() => {
-                          if (confirm("Tem a certeza que deseja eliminar este documento?")) {
-                            deleteDocMutation.mutate(doc.documentId);
-                          }
-                        }}
-                        className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {!isExternal && (
+                        <button
+                          onClick={() => setConfirmDelete({ type: "document", id: doc.documentId })}
+                          className="p-2 hover:bg-destructive/10 rounded-lg text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -549,115 +632,123 @@ export default function SwotAnalysisPage() {
       {/* Expanded Quadrant Modal */}
       {expandedQuadrant && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-8 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-slate-50 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-8 py-6 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
+          <div className="bg-background rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-8 py-6 border-b border-border flex items-center justify-between bg-card shrink-0">
               <div className="flex items-center gap-4">
                 <div
                   className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm ${
                     colorMap[
-                      QUADRANT_CONFIG.find((c) => c.type === expandedQuadrant)?.color ?? "emerald"
+                      QUADRANT_CONFIG.find(c => c.type === expandedQuadrant)?.color ?? "emerald"
                     ].bg
                   } ${
                     colorMap[
-                      QUADRANT_CONFIG.find((c) => c.type === expandedQuadrant)?.color ?? "emerald"
+                      QUADRANT_CONFIG.find(c => c.type === expandedQuadrant)?.color ?? "emerald"
                     ].text
                   }`}
                 >
                   {(() => {
-                    const Icon = QUADRANT_CONFIG.find((c) => c.type === expandedQuadrant)?.icon ?? Target;
+                    const Icon =
+                      QUADRANT_CONFIG.find(c => c.type === expandedQuadrant)?.icon ?? Target;
                     return <Icon size={24} />;
                   })()}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    {QUADRANT_CONFIG.find((c) => c.type === expandedQuadrant)?.label}
+                  <h2 className="text-xl font-bold text-foreground">
+                    {QUADRANT_CONFIG.find(c => c.type === expandedQuadrant)?.label}
                   </h2>
-                  <p className="text-sm text-slate-500 font-medium">
+                  <p className="text-sm text-muted-foreground font-medium">
                     Reveja e gerencie todos os fatores identificados neste grupo.
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleOpenAdd(expandedQuadrant)}
-                  className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-800 transition-all shadow-lg cursor-pointer"
-                >
-                  <PlusIcon size={18} />
-                  Adicionar Fator
-                </button>
+                {!isExternal && (
+                  <Button size="sm" onClick={() => handleOpenAdd(expandedQuadrant)}>
+                    <PlusIcon size={18} />
+                    Adicionar Fator
+                  </Button>
+                )}
                 <button
                   onClick={() => setExpandedQuadrant(null)}
-                  className="p-2.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 cursor-pointer"
+                  className="p-2.5 hover:bg-muted rounded-full text-muted-foreground hover:text-foreground transition-colors bg-background cursor-pointer"
                 >
                   <X size={20} />
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-8 bg-muted/30">
               <div className="flex flex-col gap-4 max-w-3xl mx-auto">
-                {getItems(yearDetail, expandedQuadrant).map((item) => (
+                {getItems(yearDetail, expandedQuadrant).map(item => (
                   <div
                     key={item.id}
-                    className="group bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all"
+                    className="group bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-all"
                   >
                     {editItemId === item.id ? (
                       <div className="space-y-3">
                         <textarea
-                          className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+                          className="w-full px-3 py-2 bg-muted border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
                           rows={2}
                           value={editText}
-                          onChange={(e) => setEditText(e.target.value)}
+                          onChange={e => setEditText(e.target.value)}
                         />
                         <div className="flex gap-2">
-                          <button
-                            onClick={handleSaveEdit}
-                            className="px-3 py-1.5 bg-indigo-600 text-white font-bold rounded-lg text-xs hover:bg-indigo-700 transition-all cursor-pointer"
-                          >
+                          <Button size="sm" onClick={handleSaveEdit}>
                             Guardar
-                          </button>
-                          <button
-                            onClick={() => setEditItemId(null)}
-                            className="px-3 py-1.5 bg-slate-100 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-200 transition-all cursor-pointer"
-                          >
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditItemId(null)}>
                             Cancelar
-                          </button>
+                          </Button>
                         </div>
+                      </div>
+                    ) : !isExternal ? (
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm text-foreground leading-relaxed flex-1">
+                          {item.text}
+                        </p>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0 ml-3">
+                              <MoreVertical size={16} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="z-[150]">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setYearAssociateItemId(item.id);
+                                setSwotAssociatedYearIds(new Set(item.years.map(y => y.yearId)));
+                              }}
+                            >
+                              <Calendar size={14} />
+                              Gerir Anos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStartEdit(item)}>
+                              <TrendingUp size={14} className="rotate-45" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => setConfirmDelete({ type: "item", id: item.id })}
+                            >
+                              <Trash2 size={14} />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     ) : (
-                      <div className="flex items-start justify-between">
-                        <p className="text-sm text-slate-800 leading-relaxed flex-1">{item.text}</p>
-                        <div className="flex items-center gap-1 ml-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                          <button
-                            onClick={() => handleStartEdit(item)}
-                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                            title="Editar"
-                          >
-                            <TrendingUp size={14} className="rotate-45" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm("Tem a certeza que deseja eliminar este fator?")) {
-                                deleteItemMutation.mutate(item.id);
-                              }
-                            }}
-                            className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
+                      <p className="text-sm text-foreground leading-relaxed">{item.text}</p>
                     )}
                   </div>
                 ))}
                 {getItems(yearDetail, expandedQuadrant).length === 0 && (
                   <div className="col-span-full py-20 text-center">
-                    <PlusIcon size={48} className="mx-auto text-slate-200 mb-4" />
-                    <h3 className="text-lg font-bold text-slate-400 tracking-tight">
+                    <PlusIcon size={48} className="mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-bold text-muted-foreground tracking-tight">
                       Nenhum fator identificado
                     </h3>
-                    <p className="text-slate-400 text-sm mt-1">
+                    <p className="text-muted-foreground text-sm mt-1">
                       Comece por adicionar um novo fator a este grupo.
                     </p>
                   </div>
@@ -665,16 +756,13 @@ export default function SwotAnalysisPage() {
               </div>
             </div>
 
-            <div className="px-8 py-4 border-t border-slate-200 bg-white flex items-center justify-between shrink-0">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+            <div className="px-8 py-4 border-t border-border bg-card flex items-center justify-between shrink-0">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Total: {getItems(yearDetail, expandedQuadrant).length} Fatores
               </span>
-              <button
-                onClick={() => setExpandedQuadrant(null)}
-                className="px-6 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-all text-sm cursor-pointer"
-              >
+              <Button variant="outline" size="sm" onClick={() => setExpandedQuadrant(null)}>
                 Fechar
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -682,46 +770,112 @@ export default function SwotAnalysisPage() {
 
       {/* Add Item Dialog */}
       {addDialogOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8">
-            <h2 className="text-xl font-bold text-slate-900 mb-2">
-              Adicionar {QUADRANT_CONFIG.find((c) => c.type === addType)?.label}
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg p-8">
+            <h2 className="text-xl font-bold text-foreground mb-2">
+              Adicionar {QUADRANT_CONFIG.find(c => c.type === addType)?.label}
             </h2>
-            <p className="text-slate-500 text-sm mb-6">
+            <p className="text-muted-foreground text-sm mb-6">
               Identifique um novo fator para a análise estratégica.
             </p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
                   Texto do Fator
                 </label>
                 <textarea
                   placeholder="Descreva o fator identificado..."
-                  className="w-full h-24 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all resize-none"
+                  className="w-full h-24 px-4 py-3 bg-muted border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none"
                   value={addText}
-                  onChange={(e) => setAddText(e.target.value)}
+                  onChange={e => setAddText(e.target.value)}
                 />
               </div>
               <div className="pt-4 flex gap-3">
-                <button
+                <Button
+                  variant="outline"
+                  className="flex-1"
                   onClick={() => setAddDialogOpen(false)}
-                  className="flex-1 px-4 py-3 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all text-sm cursor-pointer"
                 >
                   Cancelar
-                </button>
-                <button
+                </Button>
+                <Button
+                  className="flex-1 shadow-lg shadow-primary/20"
                   onClick={handleAddItem}
                   disabled={!addText.trim()}
-                  className="flex-1 px-4 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all text-sm disabled:opacity-50 shadow-lg shadow-indigo-200 cursor-pointer"
                 >
                   Adicionar Fator
-                </button>
+                </Button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Year Association Dialog */}
+      <YearAssociationDialog
+        open={yearAssociateItemId !== null}
+        onOpenChange={open => {
+          if (!open) setYearAssociateItemId(null);
+        }}
+        title="Gerir Anos"
+        description="Selecione os anos em que este fator deve estar presente."
+        allYears={allYears ?? []}
+        associatedYearIds={swotAssociatedYearIds}
+        currentYearId={effectiveYearId}
+        overlayClassName="z-[130] backdrop-blur-sm"
+        contentClassName="z-[131]"
+        onAssociate={yearId => {
+          if (yearAssociateItemId !== null) {
+            associateYearsMutation.mutate({
+              itemId: yearAssociateItemId,
+              associateYearIds: [yearId],
+              disassociateYearIds: [],
+            });
+          }
+        }}
+        onDisassociate={yearId => {
+          if (yearAssociateItemId !== null) {
+            associateYearsMutation.mutate({
+              itemId: yearAssociateItemId,
+              associateYearIds: [],
+              disassociateYearIds: [yearId],
+            });
+          }
+        }}
+        isPending={associateYearsMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onOpenChange={open => {
+          if (!open) setConfirmDelete(null);
+        }}
+        title={confirmDelete?.type === "item" ? "Eliminar Fator" : "Eliminar Documento"}
+        description={
+          confirmDelete?.type === "item"
+            ? "Esta ação é irreversível e eliminará o fator de todos os anos associados. Se pretende apenas desassociar de um ano específico, utilize a opção de gestão de anos. Tem a certeza que deseja eliminar este fator SWOT?"
+            : "Tem a certeza que deseja eliminar este documento?"
+        }
+        confirmLabel="Eliminar"
+        overlayClassName="z-[140]"
+        contentClassName="z-[150]"
+        onConfirm={() => {
+          if (confirmDelete?.type === "item") {
+            deleteItemMutation.mutate(confirmDelete.id);
+          } else if (confirmDelete?.type === "document") {
+            deleteDocMutation.mutate(confirmDelete.id);
+          }
+        }}
+      />
+
+      <LogDialog
+        open={pageLogOpen}
+        onOpenChange={setPageLogOpen}
+        entityTypes={["SWOT_ANALYSIS", "SWOT_ITEM"] as EntityType[]}
+        yearId={effectiveYearId ?? undefined}
+        title="Histórico — Análise SWOT"
+      />
     </div>
   );
 }

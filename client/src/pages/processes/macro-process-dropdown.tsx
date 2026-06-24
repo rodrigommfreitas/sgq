@@ -10,6 +10,7 @@ import {
 import { MoreVertical, Plus, Trash2 } from "lucide-react";
 import { DeleteMacroProcessDialog } from "./delete-macro-process-dialog";
 import { CreateProcessDialog } from "./create-process-dialog";
+import { useAuth } from "@/context/auth-context";
 
 interface MacroProcessDropdownProps {
   macroProcessId: number;
@@ -20,6 +21,9 @@ interface MacroProcessDropdownProps {
 export const MacroProcessDropdown = ({ macroProcessId, macroProcessYearId, yearId }: MacroProcessDropdownProps) => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const { isExternal } = useAuth();
+
+  if (isExternal) return null;
 
   return (
     <>

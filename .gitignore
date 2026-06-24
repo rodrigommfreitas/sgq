@@ -12,3 +12,8 @@ target/
 .idea/
 *.iml
 .vscode/
+server/files/
+*.docx
+.opencode/
+tmp/
+.next/

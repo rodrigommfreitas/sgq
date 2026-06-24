@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   InterestedPartyResponse,
@@ -26,6 +26,9 @@ import {
   deleteDocument,
 } from "@/api/core";
 import { useAuth } from "@/context/auth-context";
+import YearAssociationDialog from "@/components/year-association-dialog";
+import ProcessAssociationDialog from "@/components/process-association-dialog";
+import { YearSelector } from "@/components/year-selector";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -57,12 +60,22 @@ import {
   Link as LinkIcon,
   Phone,
   Calendar,
-  Check,
   X,
   ChevronRight,
   Paperclip,
   Upload,
+  History,
+  MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { LogDialog } from "@/components/log-dialog";
+import type { EntityType } from "@/types";
 
 type SortKey = "name" | "type" | "category";
 
@@ -93,7 +106,7 @@ const emptyForm: FormData = {
 
 export default function InterestedPartiesPage() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, isExternal } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [yearId, setYearId] = useState<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -106,12 +119,39 @@ export default function InterestedPartiesPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [yearsOpen, setYearsOpen] = useState(false);
   const [yearsParty, setYearsParty] = useState<InterestedPartyResponse | null>(null);
+  const [ipAssociatedYearIds, setIpAssociatedYearIds] = useState<Set<number>>(new Set());
   const [processOpen, setProcessOpen] = useState(false);
+  const [optimisticProcessIds, setOptimisticProcessIds] = useState<Set<number>>(new Set());
+  const [pageLogOpen, setPageLogOpen] = useState(false);
+  const [partyLogOpen, setPartyLogOpen] = useState(false);
+  const [partyLogId, setPartyLogId] = useState<number | null>(null);
 
   const { data: years, isLoading: yearsLoading } = useQuery({
     queryKey: ["years"],
     queryFn: getYears,
   });
+
+  const { data: ipAllParties } = useQuery({
+    queryKey: ["interested-parties-all-for-party", yearsParty?.id],
+    queryFn: async () => {
+      const allYrs = years ? [...years].sort((a, b) => b.year - a.year) : [];
+      const results = await Promise.all(
+        allYrs.map((y) =>
+          getInterestedPartiesByYear(y.id).then((parties) =>
+            parties.filter((p) => p.id === yearsParty!.id)
+          )
+        )
+      );
+      return results.flat();
+    },
+    enabled: yearsOpen && yearsParty !== null,
+  });
+
+  useEffect(() => {
+    if (ipAllParties) {
+      setIpAssociatedYearIds(new Set(ipAllParties.map((p) => p.yearId)));
+    }
+  }, [ipAllParties]);
 
   const sortedYearsAll = years ? [...years].sort((a, b) => b.year - a.year) : [];
   const currentYear = new Date().getFullYear();
@@ -195,6 +235,46 @@ export default function InterestedPartiesPage() {
     },
   });
 
+  const associateIPYearMutation = useMutation({
+    mutationFn: ({ yearId, full }: { yearId: number; full: boolean }) => {
+      if (full) {
+        return associateInterestedPartyYearsFull(yearsParty!.id, [yearId]);
+      }
+      return associateInterestedPartyYears(yearsParty!.id, [yearId]);
+    },
+    onSuccess: (_data, variables) => {
+      toast.success("Ano associado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
+      queryClient.invalidateQueries({ queryKey: ["interested-parties-all-for-party"] });
+      setIpAssociatedYearIds((prev) => {
+        const next = new Set(prev);
+        next.add(variables.yearId);
+        return next;
+      });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? "Erro ao associar ano");
+    },
+  });
+
+  const disassociateIPYearMutation = useMutation({
+    mutationFn: (yearId: number) =>
+      disassociateInterestedPartyYears(yearsParty!.id, [yearId]),
+    onSuccess: (_data, yearId) => {
+      toast.success("Ano desassociado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
+      queryClient.invalidateQueries({ queryKey: ["interested-parties-all-for-party"] });
+      setIpAssociatedYearIds((prev) => {
+        const next = new Set(prev);
+        next.delete(yearId);
+        return next;
+      });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? "Erro ao desassociar ano");
+    },
+  });
+
   const handleEdit = (p: InterestedPartyResponse) => {
     setEditId(p.interestedPartyYearId);
     setForm({
@@ -270,7 +350,7 @@ export default function InterestedPartiesPage() {
   if (!years || years.length === 0) {
     return (
       <div className="max-w-5xl mx-auto w-full mt-8">
-        <h1 className="text-2xl font-semibold mb-6">4.2. Partes Interessadas</h1>
+        <h1 className="text-2xl font-semibold mb-6">Partes Interessadas</h1>
         <p className="text-muted-foreground">Nenhum ano disponível. Crie anos primeiro.</p>
       </div>
     );
@@ -279,43 +359,40 @@ export default function InterestedPartiesPage() {
   return (
     <div className="flex flex-col gap-4 max-w-5xl mx-auto w-full mt-8 mb-40">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 pb-6">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary shrink-0 shadow-sm">
             <Users size={24} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Partes Interessadas</h1>
-            <p className="text-muted-foreground text-sm">Gerir partes interessadas, necessidades e expetativas.</p>
+            <h1 className="text-2xl font-bold text-foreground">Partes Interessadas</h1>
+            <p className="text-muted-foreground text-sm mt-1">Gerir partes interessadas, necessidades e expetativas.</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Select
-            value={selectedYearId?.toString() ?? ""}
-            onValueChange={(v) => setYearId(Number(v))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setPageLogOpen(true)}
+            className="p-2 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all cursor-pointer"
+            title="Histórico de alterações"
           >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Selecionar ano" />
-            </SelectTrigger>
-            <SelectContent>
-              {sortedYearsAll.map((y) => (
-                <SelectItem key={y.id} value={y.id.toString()}>
-                  {y.year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            onClick={() => {
-              setForm(emptyForm);
-              setCreateOpen(true);
-            }}
-            disabled={!selectedYearId}
-          >
-            <Plus className="size-4" />
-            Nova Parte
-          </Button>
+            <History size={20} />
+          </button>
+          <YearSelector
+            selectedYearId={selectedYearId}
+            onYearChange={(v) => setYearId(v)}
+          />
+          {!isExternal && (
+            <Button
+              onClick={() => {
+                setForm(emptyForm);
+                setCreateOpen(true);
+              }}
+              disabled={!selectedYearId}
+            >
+              <Plus className="size-4" />
+              Nova Parte
+            </Button>
+          )}
         </div>
       </div>
 
@@ -365,6 +442,11 @@ export default function InterestedPartiesPage() {
                 setYearsParty(p);
                 setYearsOpen(true);
               }}
+              onLog={() => {
+                setPartyLogId(p.id);
+                setPartyLogOpen(true);
+              }}
+              isExternal={isExternal}
             />
           ))}
         </div>
@@ -421,12 +503,15 @@ export default function InterestedPartiesPage() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar Parte Interessada</DialogTitle>
-            <DialogDescription>Altere os dados da parte interessada.</DialogDescription>
+            <DialogTitle>{isExternal ? "Detalhes da Parte Interessada" : "Editar Parte Interessada"}</DialogTitle>
+            <DialogDescription>{isExternal ? "Visualizar detalhes da parte interessada." : "Altere os dados da parte interessada."}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <PartyFormFields form={form} setForm={setForm} processOptions={processOptions ?? []} onOpenProcessDialog={() => {
+            <PartyFormFields form={form} setForm={setForm} processOptions={processOptions ?? []}
+              readOnly={isExternal}
+              onOpenProcessDialog={() => {
               if (editParty) {
+                setOptimisticProcessIds(new Set(editParty.processes?.map((p) => p.processYearId) ?? []));
                 setProcessOpen(true);
               }
             }}
@@ -442,62 +527,114 @@ export default function InterestedPartiesPage() {
             />
           </div>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancelar</Button>
-            </DialogClose>
-            <Button
-              onClick={() =>
-                updateMutation.mutate({
-                  id: editId!,
-                  data: {
-                    name: form.name || null,
-                    type: form.type,
-                    category: form.category || null,
-                    contactInfo: form.contactInfo || null,
-                    needs: form.needs || null,
-                    communicationAndMonitoringPlan: form.communicationAndMonitoringPlan || null,
-                  },
-                })
-              }
-              disabled={updateMutation.isPending || !form.name.trim() || !form.type}
-            >
-              {updateMutation.isPending ? "A guardar..." : "Guardar"}
-            </Button>
+            {isExternal ? (
+              <DialogClose asChild>
+                <Button variant="outline">Fechar</Button>
+              </DialogClose>
+            ) : (
+              <>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button
+                  onClick={() =>
+                    updateMutation.mutate({
+                      id: editId!,
+                      data: {
+                        name: form.name || null,
+                        type: form.type,
+                        category: form.category || null,
+                        contactInfo: form.contactInfo || null,
+                        needs: form.needs || null,
+                        communicationAndMonitoringPlan: form.communicationAndMonitoringPlan || null,
+                      },
+                    })
+                  }
+                  disabled={updateMutation.isPending || !form.name.trim() || !form.type}
+                >
+                  {updateMutation.isPending ? "A guardar..." : "Guardar"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Year Association Dialog */}
-      {yearsParty && (
-        <YearAssociationDialog
-          isOpen={yearsOpen}
-          onClose={() => {
-            setYearsOpen(false);
-            setYearsParty(null);
+      <YearAssociationDialog
+        open={yearsOpen}
+        onOpenChange={(o) => { if (!o) { setYearsOpen(false); setYearsParty(null); } }}
+        title="Gerir Anos"
+        description={`Selecione os anos em que ${yearsParty?.name ?? ""} está ativa.`}
+        allYears={sortedYearsAll}
+        associatedYearIds={ipAssociatedYearIds}
+        currentYearId={selectedYearId}
+        onAssociate={(yearId) => associateIPYearMutation.mutate({ yearId, full: false })}
+        onAssociateFull={(yearId) => associateIPYearMutation.mutate({ yearId, full: true })}
+        onDisassociate={(yearId) => disassociateIPYearMutation.mutate(yearId)}
+        isPending={associateIPYearMutation.isPending || disassociateIPYearMutation.isPending}
+        minYears={1}
+      />
+
+      {/* Process Association Dialog */}
+      {editParty && (
+        <ProcessAssociationDialog
+          open={processOpen}
+          onOpenChange={(o) => { if (!o) setProcessOpen(false); }}
+          allProcesses={processOptions ?? []}
+          associatedIds={optimisticProcessIds}
+          onAssociate={(processYearId) => {
+            setOptimisticProcessIds((prev) => new Set(prev).add(processYearId));
+            associateInterestedPartyProcesses(editParty.interestedPartyYearId, [processYearId])
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
+                queryClient.invalidateQueries({ queryKey: ["process-options"] });
+                toast.success("Processo associado com sucesso!");
+              })
+              .catch((err: any) => {
+                setOptimisticProcessIds((prev) => {
+                  const next = new Set(prev);
+                  next.delete(processYearId);
+                  return next;
+                });
+                toast.error(err?.response?.data?.message ?? "Erro ao associar processo");
+              });
           }}
-          party={yearsParty}
-          allYears={sortedYearsAll}
-          currentYearId={selectedYearId!}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
+          onDisassociate={(processYearId) => {
+            setOptimisticProcessIds((prev) => {
+              const next = new Set(prev);
+              next.delete(processYearId);
+              return next;
+            });
+            disassociateInterestedPartyProcesses(editParty.interestedPartyYearId, [processYearId])
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
+                queryClient.invalidateQueries({ queryKey: ["process-options"] });
+                toast.success("Processo desassociado com sucesso!");
+              })
+              .catch((err: any) => {
+                setOptimisticProcessIds((prev) => new Set(prev).add(processYearId));
+                toast.error(err?.response?.data?.message ?? "Erro ao desassociar processo");
+              });
           }}
         />
       )}
 
-      {/* Process Association Dialog */}
-      {editParty && processOpen && (
-        <ProcessAssociationDialog
-          isOpen={processOpen}
-          onClose={() => {
-            setProcessOpen(false);
-          }}
-          party={editParty}
-          allProcesses={processOptions ?? []}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["interested-parties", selectedYearId] });
-          }}
-        />
-      )}
+      <LogDialog
+        open={pageLogOpen}
+        onOpenChange={setPageLogOpen}
+        entityTypes={["INTERESTED_PARTY"] as EntityType[]}
+        yearId={selectedYearId ?? undefined}
+        title="Histórico — Partes Interessadas"
+      />
+
+      <LogDialog
+        open={partyLogOpen}
+        onOpenChange={setPartyLogOpen}
+        entityTypes={["INTERESTED_PARTY"] as EntityType[]}
+        baseEntityId={partyLogId ?? undefined}
+        title="Histórico da Parte Interessada"
+      />
     </div>
   );
 }
@@ -507,11 +644,15 @@ function PartyCard({
   onClick,
   onDelete,
   onManageYears,
+  onLog,
+  isExternal,
 }: {
   party: InterestedPartyResponse;
   onClick: () => void;
   onDelete: () => void;
   onManageYears: () => void;
+  onLog: () => void;
+  isExternal: boolean;
 }) {
   const isInternal = party.type === "INTERNAL";
   const hasDetails = party.processes && party.processes.length > 0;
@@ -563,23 +704,32 @@ function PartyCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <button
-            onClick={onManageYears}
-            className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-bold text-slate-500 transition-colors"
-            title="Gerir anos"
-          >
-            <Calendar size={12} />
-            {party.year}
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-destructive transition-colors"
-            title="Eliminar"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
+        {!isExternal && (
+          <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
+                  <MoreVertical size={16} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onManageYears}>
+                  <Calendar size={14} />
+                  Gerir Anos
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onLog}>
+                  <History size={14} />
+                  Histórico
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                  <Trash2 size={14} />
+                  Eliminar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
       {hasDetails && (
@@ -595,320 +745,6 @@ function PartyCard({
   );
 }
 
-function YearAssociationDialog({
-  isOpen,
-  onClose,
-  party,
-  allYears,
-  currentYearId,
-  onSuccess,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  party: InterestedPartyResponse;
-  allYears: YearResponse[];
-  currentYearId: number;
-  onSuccess: () => void;
-}) {
-  const queryClient = useQueryClient();
-
-  const { data: allParties } = useQuery({
-    queryKey: ["interested-parties-all-for-party", party.id],
-    queryFn: async () => {
-      const results = await Promise.all(
-        allYears.map((y) =>
-          getInterestedPartiesByYear(y.id).then((parties) =>
-            parties.filter((p) => p.id === party.id)
-          )
-        )
-      );
-      return results.flat();
-    },
-    enabled: isOpen,
-  });
-
-  const associatedYearIds = new Set(allParties?.map((p) => p.yearId) ?? []);
-
-  const [pendingYear, setPendingYear] = useState<number | null>(null);
-
-const associateMutation = useMutation({
-    mutationFn: ({ yearId, full }: { yearId: number; full: boolean }) => {
-      if (full) {
-        return associateInterestedPartyYearsFull(party.id, [yearId]);
-      }
-      return associateInterestedPartyYears(party.id, [yearId]);
-    },
-    onSuccess: () => {
-      toast.success("Ano associado com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
-      queryClient.invalidateQueries({ queryKey: ["interested-parties-all-for-party"] });
-      setPendingYear(null);
-      onSuccess();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Erro ao associar ano");
-    },
-  });
-
-  const disassociateMutation = useMutation({
-    mutationFn: (yearId: number) =>
-      disassociateInterestedPartyYears(party.id, [yearId]),
-    onSuccess: () => {
-      toast.success("Ano desassociado com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["interested-parties"] });
-      queryClient.invalidateQueries({ queryKey: ["interested-parties-all-for-party"] });
-      onSuccess();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Erro ao desassociar ano");
-    },
-  });
-
-  if (!isOpen) return null;
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Calendar className="text-primary" size={20} />
-            Gerir Anos
-          </DialogTitle>
-          <DialogDescription>
-            Selecione os anos em que <strong>{party.name}</strong> está ativa.
-          </DialogDescription>
-        </DialogHeader>
-
-        {pendingYear !== null ? (
-          <div className="py-4 space-y-3">
-            <h3 className="text-sm font-bold text-slate-800">Associar ano {allYears.find((y) => y.id === pendingYear)?.year}</h3>
-            <p className="text-xs text-slate-500">
-              Como deseja associar este ano?
-            </p>
-            <button
-              onClick={() => associateMutation.mutate({ yearId: pendingYear, full: false })}
-              disabled={associateMutation.isPending}
-              className="w-full text-left p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group cursor-pointer"
-            >
-              <div className="font-bold text-slate-800 group-hover:text-blue-700 text-sm">Apenas esta parte interessada</div>
-              <div className="text-xs text-slate-500">A parte interessada será associada ao novo ano sem copiar processos.</div>
-            </button>
-            <button
-              onClick={() => associateMutation.mutate({ yearId: pendingYear, full: true })}
-              disabled={associateMutation.isPending}
-              className="w-full text-left p-4 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group cursor-pointer"
-            >
-              <div className="font-bold text-slate-800 group-hover:text-blue-700 text-sm">Copiar dados do ano atual</div>
-              <div className="text-xs text-slate-500">Inclui processos e indicadores atualmente associados.</div>
-            </button>
-            <button
-              onClick={() => setPendingYear(null)}
-              className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 font-medium cursor-pointer"
-            >
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="py-4 space-y-4 max-h-[400px] overflow-y-auto">
-              {(() => {
-                const associated = allYears.filter((y) => associatedYearIds.has(y.id));
-                const other = allYears.filter((y) => !associatedYearIds.has(y.id));
-                return (
-                  <>
-                    {associated.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Anos Associados</h4>
-                        <div className="space-y-2">
-                          {associated.map((y) => {
-                            const isCurrentYear = y.id === currentYearId;
-                            return (
-                              <div
-                                key={y.id}
-                                className="w-full flex items-center justify-between px-4 py-3 rounded-lg border bg-blue-50 border-blue-200 text-blue-700"
-                              >
-                                <span className="font-bold text-sm">{y.year}</span>
-                                <div className="flex items-center gap-2">
-                                  {isCurrentYear && (
-                                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">atual</span>
-                                  )}
-                                  <button
-                                    onClick={() => {
-                                      if (associated.length <= 1) {
-                                        toast.error("Uma parte interessada deve ter pelo menos um ano associado.");
-                                        return;
-                                      }
-                                      disassociateMutation.mutate(y.id);
-                                    }}
-                                    className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer"
-                                    title="Remover ano"
-                                  >
-                                    <X size={16} />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    {other.length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Outros Anos</h4>
-                        <div className="space-y-2">
-                          {other.map((y) => (
-                            <button
-                              key={y.id}
-                              onClick={() => setPendingYear(y.id)}
-                              className="w-full flex items-center justify-between px-4 py-3 rounded-lg border bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer"
-                            >
-                              <span className="font-bold text-sm">{y.year}</span>
-                              <Plus size={16} className="text-slate-400" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Fechar</Button>
-              </DialogClose>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ProcessAssociationDialog({
-  isOpen,
-  onClose,
-  party,
-  allProcesses,
-  onSuccess,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  party: InterestedPartyResponse;
-  allProcesses: ProcessOptionResponse[];
-  onSuccess: () => void;
-}) {
-  const [search, setSearch] = useState("");
-  const currentProcessIds = new Set(party.processes?.map((p) => p.processYearId) ?? []);
-
-  const filteredProcesses = search.trim()
-    ? allProcesses.filter(
-        (p) =>
-          p.processName.toLowerCase().includes(search.toLowerCase()) ||
-          (p.macroProcessName?.toLowerCase() ?? "").includes(search.toLowerCase()),
-      )
-    : allProcesses;
-
-  const associateMutation = useMutation({
-    mutationFn: (processYearIds: number[]) =>
-      associateInterestedPartyProcesses(party.interestedPartyYearId, processYearIds),
-    onSuccess: () => {
-      toast.success("Processo associado com sucesso!");
-      onSuccess();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Erro ao associar processo");
-    },
-  });
-
-  const disassociateMutation = useMutation({
-    mutationFn: (processYearIds: number[]) =>
-      disassociateInterestedPartyProcesses(party.interestedPartyYearId, processYearIds),
-    onSuccess: () => {
-      toast.success("Processo desassociado com sucesso!");
-      onSuccess();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Erro ao desassociar processo");
-    },
-  });
-
-  const handleToggle = (processYearId: number) => {
-    if (currentProcessIds.has(processYearId)) {
-      disassociateMutation.mutate([processYearId]);
-    } else {
-      associateMutation.mutate([processYearId]);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Associar Processos</DialogTitle>
-          <DialogDescription>
-            Associe ou desassocie processos a <strong>{party.name}</strong>.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="px-6 py-3 border-b bg-slate-50/50">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-4" />
-            <Input
-              placeholder="Pesquisar processos..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
-          {filteredProcesses.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm">
-              Nenhum processo encontrado.
-            </div>
-          ) : (
-            filteredProcesses.map((proc) => {
-              const isAssociated = currentProcessIds.has(proc.processYearId);
-              return (
-                <button
-                  key={proc.processYearId}
-                  onClick={() => handleToggle(proc.processYearId)}
-                  disabled={associateMutation.isPending || disassociateMutation.isPending}
-                  className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left group ${
-                    isAssociated
-                      ? "bg-blue-50 border-blue-200 hover:bg-blue-100"
-                      : "border-transparent hover:bg-slate-50 hover:border-slate-200"
-                  }`}
-                >
-                  <div>
-                    <div className="font-medium text-sm text-slate-800">{proc.processName}</div>
-                    {proc.macroProcessName && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 border border-slate-200 px-1 rounded bg-slate-50 mt-1 inline-block">
-                        {proc.macroProcessName}
-                      </span>
-                    )}
-                  </div>
-                  {isAssociated && <Check size={16} className="text-blue-600 shrink-0" />}
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <DialogFooter className="border-t pt-4">
-          <DialogClose asChild>
-            <Button variant="outline">Fechar</Button>
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function PartyFormFields({
   form,
   setForm,
@@ -920,6 +756,7 @@ function PartyFormFields({
   uploadPending,
   deletePending,
   showAssociations = true,
+  readOnly = false,
 }: {
   form: FormData;
   setForm: React.Dispatch<React.SetStateAction<FormData>>;
@@ -931,6 +768,7 @@ function PartyFormFields({
   uploadPending?: boolean;
   deletePending?: boolean;
   showAssociations?: boolean;
+  readOnly?: boolean;
 }) {
   const associatedProcesses = processOptions.filter((p) =>
     form.processYearIds.includes(p.processYearId)
@@ -942,73 +780,97 @@ function PartyFormFields({
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 grid gap-1.5">
             <Label htmlFor="name">Nome *</Label>
-            <Input
-              id="name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Nome da parte interessada"
-            />
+            {readOnly ? (
+              <p className="text-sm text-foreground py-2 px-1">{form.name || '-'}</p>
+            ) : (
+              <Input
+                id="name"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Nome da parte interessada"
+              />
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="type">Tipo *</Label>
-            <Select
-              value={form.type}
-              onValueChange={(v) => setForm((f) => ({ ...f, type: v as InterestedPartyType }))}
-            >
-              <SelectTrigger id="type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="INTERNAL">Interna</SelectItem>
-                <SelectItem value="EXTERNAL">Externa</SelectItem>
-              </SelectContent>
-            </Select>
+            {readOnly ? (
+              <p className="text-sm text-foreground py-2 px-1">{typeLabels[form.type]}</p>
+            ) : (
+              <Select
+                value={form.type}
+                onValueChange={(v) => setForm((f) => ({ ...f, type: v as InterestedPartyType }))}
+              >
+                <SelectTrigger id="type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INTERNAL">Interna</SelectItem>
+                  <SelectItem value="EXTERNAL">Externa</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="category">Categoria</Label>
-            <Input
-              id="category"
-              value={form.category}
-              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-              placeholder="Ex: Funcionário, Cliente"
-            />
+            {readOnly ? (
+              <p className="text-sm text-foreground py-2 px-1">{form.category || '-'}</p>
+            ) : (
+              <Input
+                id="category"
+                value={form.category}
+                onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                placeholder="Ex: Funcionário, Cliente"
+              />
+            )}
           </div>
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="contactInfo">Contacto</Label>
-          <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-            <Input
-              id="contactInfo"
-              value={form.contactInfo}
-              onChange={(e) => setForm((f) => ({ ...f, contactInfo: e.target.value }))}
-              placeholder="Email ou telefone"
-              className="pl-9"
-            />
-          </div>
+          {readOnly ? (
+            <p className="text-sm text-foreground py-2 px-1">{form.contactInfo || '-'}</p>
+          ) : (
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <Input
+                id="contactInfo"
+                value={form.contactInfo}
+                onChange={(e) => setForm((f) => ({ ...f, contactInfo: e.target.value }))}
+                placeholder="Email ou telefone"
+                className="pl-9"
+              />
+            </div>
+          )}
         </div>
       </div>
 
       <div className="space-y-4">
         <div className="grid gap-1.5">
           <Label htmlFor="needs">Necessidades e Expetativas</Label>
-          <textarea
-            id="needs"
-            className="flex min-h-[100px] w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none resize-none"
-            value={form.needs}
-            onChange={(e) => setForm((f) => ({ ...f, needs: e.target.value }))}
-            placeholder="Que necessidades e expetativas tem esta parte interessada?"
-          />
+          {readOnly ? (
+            <p className="text-sm text-foreground whitespace-pre-wrap py-2 px-1">{form.needs || '-'}</p>
+          ) : (
+            <textarea
+              id="needs"
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none resize-none"
+              value={form.needs}
+              onChange={(e) => setForm((f) => ({ ...f, needs: e.target.value }))}
+              placeholder="Que necessidades e expetativas tem esta parte interessada?"
+            />
+          )}
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="communicationAndMonitoringPlan">Plano de Comunicação e Monitorização</Label>
-          <textarea
-            id="communicationAndMonitoringPlan"
-            className="flex min-h-[100px] w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none resize-none"
-            value={form.communicationAndMonitoringPlan}
-            onChange={(e) => setForm((f) => ({ ...f, communicationAndMonitoringPlan: e.target.value }))}
-            placeholder="Como comunicar e monitorizar esta parte interessada?"
-          />
+          {readOnly ? (
+            <p className="text-sm text-foreground whitespace-pre-wrap py-2 px-1">{form.communicationAndMonitoringPlan || '-'}</p>
+          ) : (
+            <textarea
+              id="communicationAndMonitoringPlan"
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-slate-50 px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none resize-none"
+              value={form.communicationAndMonitoringPlan}
+              onChange={(e) => setForm((f) => ({ ...f, communicationAndMonitoringPlan: e.target.value }))}
+              placeholder="Como comunicar e monitorizar esta parte interessada?"
+            />
+          )}
         </div>
       </div>
 
@@ -1020,7 +882,7 @@ function PartyFormFields({
           <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
             Processos Associados
           </h4>
-          {onOpenProcessDialog && (
+          {onOpenProcessDialog && !readOnly && (
             <button
               onClick={onOpenProcessDialog}
               className="flex items-center gap-1 text-sm bg-blue-50 border border-blue-200 hover:border-blue-400 hover:text-blue-700 text-blue-600 px-3 py-1.5 rounded-md shadow-sm transition-all cursor-pointer"
@@ -1043,18 +905,20 @@ function PartyFormFields({
                     <span className="text-xs text-slate-400 uppercase">{proc.macroProcessName}</span>
                   )}
                 </div>
-                <button
-                  onClick={() =>
-                    setForm((f) => ({
-                      ...f,
-                      processYearIds: f.processYearIds.filter((id) => id !== proc.processYearId),
-                    }))
-                  }
-                  className="text-slate-300 hover:text-red-500 transition-colors p-1"
-                  title="Desassociar"
-                >
-                  <X size={14} />
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        processYearIds: f.processYearIds.filter((id) => id !== proc.processYearId),
+                      }))
+                    }
+                    className="text-slate-300 hover:text-red-500 transition-colors p-1"
+                    title="Desassociar"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             ))
           ) : (
@@ -1071,7 +935,7 @@ function PartyFormFields({
           <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">
             Evidências
           </h4>
-          {onUploadEvidence && (
+          {onUploadEvidence && !readOnly && (
             <button
               onClick={() => document.getElementById("evidence-upload")?.click()}
               disabled={uploadPending}
@@ -1114,13 +978,23 @@ function PartyFormFields({
                     title={latestVersion?.fileName ?? "Documento"}
                   >
                     <Paperclip size={14} className="shrink-0" />
-                    <span className="truncate">
-                      {latestVersion?.fileName
-                        ? latestVersion.fileName.replace(/_[0-9a-f-]{36}\./, ".")
-                        : "Documento"}
-                    </span>
+                    <div className="flex flex-col min-w-0">
+                      {latestVersion && (
+                        <span className="text-xs text-slate-400 truncate">
+                          {latestVersion.uploadedBy
+                            ? `${latestVersion.uploadedBy.firstName} ${latestVersion.uploadedBy.lastName} · `
+                            : ""}
+                          {new Date(latestVersion.uploadedAt).toLocaleDateString("pt-PT")}
+                        </span>
+                      )}
+                      <span className="truncate">
+                        {latestVersion?.fileName
+                          ? latestVersion.fileName.replace(/_[0-9a-f-]{36}\./, ".")
+                          : "Documento"}
+                      </span>
+                    </div>
                   </button>
-                  {onDeleteEvidence && (
+                  {onDeleteEvidence && !readOnly && (
                     <button
                       onClick={() => onDeleteEvidence(doc.documentId)}
                       disabled={deletePending}
@@ -1137,10 +1011,10 @@ function PartyFormFields({
             <div className="col-span-full py-8 text-center border-2 border-dashed border-slate-200 rounded-lg text-slate-400">
               Nenhuma evidência carregada.
             </div>
-)}
+          )}
         </div>
       </div>
-        </>
+    </>
       )}
     </div>
   );

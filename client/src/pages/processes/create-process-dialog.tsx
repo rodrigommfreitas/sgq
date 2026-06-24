@@ -12,6 +12,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateProcess } from "@/hooks/use-create-process";
 import { DialogDescription } from "@radix-ui/react-dialog";
+import { useQuery } from "@tanstack/react-query";
+import { getDepartments } from "@/api/core";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useState } from "react";
 
 interface Props {
   open: boolean;
@@ -21,7 +25,13 @@ interface Props {
 }
 
 export const CreateProcessDialog = ({ open, onOpenChange, macroProcessYearId, yearId }: Props) => {
+  const [selectedDepts, setSelectedDepts] = useState<number[]>([]);
   const createProcessMutation = useCreateProcess();
+
+  const { data: departments } = useQuery({
+    queryKey: ["departments"],
+    queryFn: getDepartments,
+  });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -36,12 +46,14 @@ export const CreateProcessDialog = ({ open, onOpenChange, macroProcessYearId, ye
       {
         name: name.trim(),
         objective: obj?.trim() || undefined,
+        departmentIds: selectedDepts,
         yearId,
         macroProcessYearId: macroProcessYearId ?? undefined,
       },
       {
         onSuccess: () => {
           onOpenChange(false);
+          setSelectedDepts([]);
           e.currentTarget.reset();
         },
         onError: () => {
@@ -68,6 +80,30 @@ export const CreateProcessDialog = ({ open, onOpenChange, macroProcessYearId, ye
             <Field>
               <Label htmlFor="objetivo">Objetivo</Label>
               <Input id="objetivo" name="objetivo" placeholder="Objetivo" />
+            </Field>
+            <Field>
+              <Label>Departamentos</Label>
+              {departments && departments.length > 0 ? (
+                <div className="space-y-2 mt-1">
+                  {departments.map((dept) => (
+                    <label key={dept.id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedDepts.includes(dept.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedDepts([...selectedDepts, dept.id]);
+                          } else {
+                            setSelectedDepts(selectedDepts.filter((id) => id !== dept.id));
+                          }
+                        }}
+                      />
+                      <span className="text-sm">{dept.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-1">Sem departamentos disponíveis.</p>
+              )}
             </Field>
           </FieldGroup>
           <DialogFooter className="mt-4">

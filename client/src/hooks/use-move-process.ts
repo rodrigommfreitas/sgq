@@ -7,19 +7,16 @@ export const useMoveProcess = () => {
 
   return useMutation({
     mutationFn: async ({
-      processId,
-      macroProcessId,
+      processYearId,
+      targetMacroProcessYearId,
     }: {
-      processId: number;
-      macroProcessId: number | null;
+      processYearId: number;
+      targetMacroProcessYearId: number | null;
     }) => {
-      await moveProcess(processId, macroProcessId);
+      await moveProcess({ processYearId, targetMacroProcessYearId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["macroprocesses"] });
-      queryClient.invalidateQueries({
-        queryKey: ["macroprocesses", "full"],
-      });
+      queryClient.invalidateQueries({ queryKey: ["macroprocess-hierarchy"] });
       toast.success("Processo movido com sucesso!");
     },
     onError: (error: any) => {

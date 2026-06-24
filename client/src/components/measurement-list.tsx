@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Plus, TrendingUp, Trash2 } from "lucide-react";
 import type { Measurement } from "@/types";
 import { InlineEdit } from "./inline-edit";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 interface MeasurementListProps {
   measurements: Measurement[];
@@ -16,6 +17,7 @@ export const MeasurementList: React.FC<MeasurementListProps> = ({
   onUpdate,
   onDelete,
 }) => {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   return (
     <div className="mt-4 border-t border-slate-100 pt-3">
       <div className="flex items-center justify-between mb-4">
@@ -73,13 +75,9 @@ export const MeasurementList: React.FC<MeasurementListProps> = ({
 
               {/* Actions */}
               <button
-                onClick={() => {
-                  if (confirm("Are you sure you want to delete this measurement?")) {
-                    //onDelete(m.id);
-                  }
-                }}
+                onClick={() => setConfirmDeleteId(m.id)}
                 className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors opacity-0 group-hover:opacity-100"
-                title="Delete Measurement"
+                title="Eliminar Medição"
               >
                 <Trash2 size={14} />
               </button>
@@ -104,6 +102,17 @@ export const MeasurementList: React.FC<MeasurementListProps> = ({
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}
+        title="Eliminar Medição"
+        description="Tem a certeza que deseja eliminar esta medição?"
+        confirmLabel="Eliminar"
+        onConfirm={() => {
+          if (confirmDeleteId !== null) onDelete?.(confirmDeleteId);
+        }}
+      />
     </div>
   );
 };

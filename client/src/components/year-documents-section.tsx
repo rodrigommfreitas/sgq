@@ -1,15 +1,13 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { DocumentVersionResponse, DocumentStatus } from "@/types";
+import type { DocumentVersionResponse } from "@/types";
 import {
-  approveDocumentVersion,
   deleteDocumentVersion,
   downloadDocumentVersion,
   stripUuidSuffix,
 } from "@/api/core";
 import { useAuth } from "@/context/auth-context";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -24,38 +22,11 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   FileText,
-  Plus,
-  Upload,
-  CheckCircle2,
-  Clock,
-  XCircle,
   Download,
+  Upload,
   Trash2,
 } from "lucide-react";
 
-function statusVariant(status: DocumentStatus) {
-  switch (status) {
-    case "APPROVED": return "default" as const;
-    case "UNDER_REVIEW": return "secondary" as const;
-    case "OBSOLETE": return "destructive" as const;
-  }
-}
-
-function statusIcon(status: DocumentStatus) {
-  switch (status) {
-    case "APPROVED": return <CheckCircle2 className="size-4" />;
-    case "UNDER_REVIEW": return <Clock className="size-4" />;
-    case "OBSOLETE": return <XCircle className="size-4" />;
-  }
-}
-
-function statusLabel(status: DocumentStatus) {
-  switch (status) {
-    case "APPROVED": return "Aprovado";
-    case "UNDER_REVIEW": return "Em revisão";
-    case "OBSOLETE": return "Obsoleto";
-  }
-}
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -116,17 +87,6 @@ export function YearDocumentsSection({ documents, queryKey, uploadFn, versioned 
     },
   });
 
-  const approveMutation = useMutation({
-    mutationFn: approveDocumentVersion,
-    onSuccess: () => {
-      toast.success("Versão aprovada com sucesso!");
-      queryClient.invalidateQueries({ queryKey });
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Erro ao aprovar a versão");
-    },
-  });
-
   const deleteVersionMutation = useMutation({
     mutationFn: deleteDocumentVersion,
     onSuccess: () => {
@@ -177,113 +137,24 @@ export function YearDocumentsSection({ documents, queryKey, uploadFn, versioned 
 
   if (documents.length === 0) {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-muted-foreground">Documentos</h3>
-          <Button size="sm" onClick={handleUploadNew}>
-            <Plus className="size-4" />
-            Novo Documento
-          </Button>
-        </div>
-        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-          <FileText className="size-12 mb-3 opacity-40" />
-          <p className="text-sm">Nenhum documento para este ano.</p>
-          <p className="text-xs mt-1">Carregue um documento para começar.</p>
-        </div>
-
-        <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Carregar Documento</DialogTitle>
-              <DialogDescription>Carregue um novo documento.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="version">Versão</Label>
-                <Input id="version" type="number" min={1} step={1} value={uploadVersion} onChange={(e) => setUploadVersion(Number(e.target.value))} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="file">Ficheiro</Label>
-                <Input id="file" type="file" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
-              </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-              <Button onClick={() => uploadMutation.mutate()} disabled={!uploadFile || uploadMutation.isPending}>
-                <Upload className="size-4" />
-                {uploadMutation.isPending ? "A carregar..." : "Carregar"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+        <FileText className="size-12 mb-3 opacity-40" />
+        <p className="text-sm">Nenhum documento para este ano.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">Documentos</h3>
-        <Button size="sm" onClick={handleUploadNew}>
-          <Plus className="size-4" />
-          Novo Documento
-        </Button>
-      </div>
-
-      {latestApproved && (
-        <div className="border border-green-200 dark:border-green-900 bg-green-50 dark:bg-green-950/30 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Versão Aprovada Atual</span>
-            <Badge variant={statusVariant("APPROVED")}>
-              {statusIcon("APPROVED")}
-              {statusLabel("APPROVED")}
-            </Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Versão:</span>{" "}
-              <span className="font-medium">{latestApproved.version}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Ficheiro:</span>{" "}
-              <span className="font-medium">{stripUuidSuffix(latestApproved.fileName)}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Carregado por:</span>{" "}
-              <span className="font-medium">
-                {latestApproved.uploadedBy?.firstName} {latestApproved.uploadedBy?.lastName}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Data:</span>{" "}
-              <span className="font-medium">{formatDate(latestApproved.uploadedAt)}</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {documents.map((doc) => (
         <div key={doc.documentId} className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Documento #{doc.documentId}</span>
-            <Button variant="outline" size="sm" onClick={() => handleUploadNewVersion(doc.documentId)}>
-              <Plus className="size-3" />
-              Nova Versão
-            </Button>
-          </div>
-          <div className="space-y-2">
-            {[...doc.versions]
-              .sort((a, b) => b.version - a.version)
-              .map((v) => (
+          {[...doc.versions]
+            .sort((a, b) => b.version - a.version)
+            .map((v) => (
                 <div key={v.versionId} className="flex items-center justify-between rounded-lg border p-3">
                   <div className="flex items-center gap-3">
-                    <Badge variant={statusVariant(v.status)}>
-                      {statusIcon(v.status)}
-                      {statusLabel(v.status)}
-                    </Badge>
                     <div>
-                      <span className="text-sm font-medium">v{v.version}</span>
-                      <span className="text-sm text-muted-foreground mx-2">—</span>
                       <span className="text-sm">{stripUuidSuffix(v.fileName)}</span>
                     </div>
                   </div>
@@ -296,12 +167,6 @@ export function YearDocumentsSection({ documents, queryKey, uploadFn, versioned 
                         <Download className="size-4" />
                       </Button>
                     )}
-                    {v.status === "UNDER_REVIEW" && (
-                      <Button variant="outline" size="sm" onClick={() => approveMutation.mutate(v.versionId)} disabled={approveMutation.isPending} title="Aprovar versão">
-                        <CheckCircle2 className="size-4" />
-                        Aprovar
-                      </Button>
-                    )}
                     {v.status !== "APPROVED" && (
                       <Button variant="ghost" size="icon-sm" onClick={() => deleteVersionMutation.mutate(v.versionId)} disabled={deleteVersionMutation.isPending} title="Eliminar versão">
                         <Trash2 className="size-4 text-destructive" />
@@ -310,7 +175,6 @@ export function YearDocumentsSection({ documents, queryKey, uploadFn, versioned 
                   </div>
                 </div>
               ))}
-          </div>
         </div>
       ))}
 
@@ -374,13 +238,7 @@ function NonVersionedDocumentList({
 }: NonVersionedDocumentListProps) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">Documentos</h3>
-        <Button size="sm" onClick={onUploadNew}>
-          <Plus className="size-4" />
-          Carregar Documento
-        </Button>
-      </div>
+      <h3 className="text-sm font-medium text-muted-foreground">Documentos</h3>
 
       {documents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">

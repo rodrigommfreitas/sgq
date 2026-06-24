@@ -1,121 +1,211 @@
-import { getIndicatorsSimple } from "@/api/core";
-import { Button } from "@/components/ui/button";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
-import { DialogClose } from "@radix-ui/react-dialog";
-import { useQuery } from "@tanstack/react-query";
-import { LinkIcon, Search } from "lucide-react";
-import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search, Plus, X, Link } from "lucide-react";
+import { getIndicatorsSimple, associateIndicatorsToProcess, disassociateIndicatorsFromProcess } from "@/api/core";
+import { toast } from "sonner";
 
 interface AssociateIndicatorDialogProps {
-  alreadyAssociatedIds?: number[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  processYearId: number;
+  yearId: number | null;
+  alreadyAssociatedIds: number[];
 }
 
-export const AssociateIndicatorDialog = ({
+export function AssociateIndicatorDialog({
+  open,
+  onOpenChange,
+  processYearId,
+  yearId,
   alreadyAssociatedIds,
-}: AssociateIndicatorDialogProps) => {
-  const [open, setOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+}: AssociateIndicatorDialogProps) {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["indicators", "simple"],
-    queryFn: getIndicatorsSimple,
+  const { data, isLoading } = useQuery({
+    queryKey: ["indicators", "simple", yearId],
+    queryFn: () => getIndicatorsSimple(yearId!),
+    enabled: !!yearId && open,
   });
 
-  const associatedIds = alreadyAssociatedIds ?? [];
+  const allIndicators = data ?? [];
+  const associatedIds = new Set(alreadyAssociatedIds);
 
-  // Indicators that can still be associated
-  const availableIndicators = data?.filter(ind => !associatedIds.includes(ind.id));
-
-  // Apply search on available indicators only
-  const filteredIndicators = availableIndicators?.filter(ind =>
-    ind.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const available = allIndicators.filter(
+    (ind) => !associatedIds.has(ind.indicatorYearId!) && ind.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const current = allIndicators.filter(
+    (ind) => associatedIds.has(ind.indicatorYearId!) && ind.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const showSearch = (availableIndicators?.length ?? 0) > 0;
+  const [optimisticAssociated, setOptimisticAssociated] = useState<Set<number>>(associatedIds);
+
+  const associateMutation = useMutation({
+    mutationFn: (indicatorYearId: number) =>
+      associateIndicatorsToProcess(processYearId, [indicatorYearId]),
+    onSuccess: () => {
+      toast.success("Indicador associado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["macroprocess-hierarchy"] });
+      queryClient.invalidateQueries({ queryKey: ["indicators"] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? "Erro ao associar indicador");
+    },
+  });
+
+  const disassociateMutation = useMutation({
+    mutationFn: (indicatorYearId: number) =>
+      disassociateIndicatorsFromProcess(processYearId, [indicatorYearId]),
+    onSuccess: () => {
+      toast.success("Indicador desassociado com sucesso!");
+      queryClient.invalidateQueries({ queryKey: ["macroprocess-hierarchy"] });
+      queryClient.invalidateQueries({ queryKey: ["indicators"] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? "Erro ao desassociar indicador");
+    },
+  });
+
+  const handleAssociate = (indicatorYearId: number) => {
+    setOptimisticAssociated((prev) => new Set(prev).add(indicatorYearId));
+    associateMutation.mutate(indicatorYearId);
+  };
+
+  const handleDisassociate = (indicatorYearId: number) => {
+    setOptimisticAssociated((prev) => {
+      const next = new Set(prev);
+      next.delete(indicatorYearId);
+      return next;
+    });
+    disassociateMutation.mutate(indicatorYearId);
+  };
+
+  const mergedAssociated = allIndicators.filter(
+    (ind) => optimisticAssociated.has(ind.indicatorYearId!) && ind.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const mergedAvailable = allIndicators.filter(
+    (ind) => !optimisticAssociated.has(ind.indicatorYearId!) && ind.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const frequencyLabels: Record<string, string> = {
+    ANNUAL: "Anual",
+    SEMESTER: "Semestral",
+    TRIMESTER: "Trimestral",
+    MONTHLY: "Mensal",
+    WEEKLY: "Semanal",
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          className="flex items-center gap-1 text-sm bg-white border border-slate-300 hover:border-slate-400 hover:text-slate-800 text-slate-600 px-3 py-1.5 rounded-md shadow-sm transition-all"
-        >
-          <LinkIcon size={14} />
-          Associar Existente
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent className="sm:max-w-sm">
+    <Dialog open={open} onOpenChange={(o) => { if (!o) setSearch(""); onOpenChange(o); }}>
+      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Associar Indicador Existente</DialogTitle>
-          <DialogDescription />
+          <DialogTitle className="flex items-center gap-2">
+            <Link className="text-primary" size={20} />
+            Associar Indicadores
+          </DialogTitle>
+          <DialogDescription>Associe ou desassocie indicadores a este processo.</DialogDescription>
         </DialogHeader>
 
-        {/* Empty state */}
-        {!isLoading && (!availableIndicators || availableIndicators.length === 0) && (
-          <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-lg">
-            <p className="text-slate-400">Não há indicadores disponíveis para associação.</p>
-          </div>
-        )}
-
-        {/* Search bar */}
-        {!isLoading && showSearch && (
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
-              type="text"
+        <div className="px-6 py-3 border-b bg-muted/20">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-4" />
+            <Input
               placeholder="Pesquisar indicadores..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
             />
           </div>
-        )}
+        </div>
 
-        {!isLoading && filteredIndicators?.length === 0 && showSearch && (
-          <div className="text-center py-4 text-sm text-slate-400">
-            Nenhum indicador encontrado para a pesquisa.
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {isLoading && (
+            <div className="py-8 text-center text-muted-foreground text-sm">A carregar indicadores...</div>
+          )}
 
-        {!isLoading &&
-          filteredIndicators?.map(ind => (
-            <div
-              key={ind.id}
-              // onClick={() => onAssociate(ind.id)}
-              className="group flex items-center justify-between p-3 rounded-md hover:bg-blue-50 cursor-pointer border border-blue-50 hover:border-blue-100 transition-all"
-            >
-              <div>
-                <div className="font-medium text-slate-800 text-sm group-hover:text-blue-800">
-                  {ind.name}
-                </div>
-                <div className="text-xs text-slate-500 flex items-center gap-2 mt-1">
-                  <span>{ind.frequency}</span>
-                  <span>•</span>
-                  <span>{ind.owner}</span>
-                </div>
-              </div>
-              <div className="text-slate-300 group-hover:text-blue-500">
-                <LinkIcon size={16} />
+          {!isLoading && mergedAssociated.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                Indicadores Associados
+              </h4>
+              <div className="space-y-1.5">
+                {mergedAssociated.map((ind) => (
+                  <div
+                    key={ind.indicatorYearId}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg border bg-primary/5 border-primary/20"
+                  >
+                    <div>
+                      <div className="font-medium text-sm text-foreground">{ind.name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {ind.formula}
+                        {ind.frequency && <span className="ml-2">{frequencyLabels[ind.frequency] ?? ind.frequency}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDisassociate(ind.indicatorYearId!)}
+                      disabled={disassociateMutation.isPending}
+                      className="p-1 rounded-lg text-primary hover:bg-primary/10 transition-colors cursor-pointer disabled:opacity-50"
+                      title="Remover indicador"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          )}
 
-        <DialogFooter className="mt-4">
+          {!isLoading && mergedAvailable.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                Outros Indicadores
+              </h4>
+              <div className="space-y-1.5">
+                {mergedAvailable.map((ind) => (
+                  <button
+                    key={ind.indicatorYearId}
+                    onClick={() => handleAssociate(ind.indicatorYearId!)}
+                    disabled={associateMutation.isPending}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg border bg-card border-border text-muted-foreground hover:border-foreground/30 hover:bg-muted transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <div className="text-left">
+                      <div className="font-medium text-sm text-foreground">{ind.name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {ind.formula}
+                        {ind.frequency && <span className="ml-2">{frequencyLabels[ind.frequency] ?? ind.frequency}</span>}
+                      </div>
+                    </div>
+                    <Plus size={16} className="text-muted-foreground shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!isLoading && mergedAssociated.length === 0 && mergedAvailable.length === 0 && (
+            <div className="py-8 text-center text-muted-foreground text-sm">
+              {search.trim() ? `Nenhum indicador encontrado para "${search}".` : "Nenhum indicador disponível para associação."}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="border-t pt-4">
           <DialogClose asChild>
-            <Button variant="outline">Cancelar</Button>
+            <Button variant="outline">Fechar</Button>
           </DialogClose>
-          <Button type="submit">Criar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-};
+}

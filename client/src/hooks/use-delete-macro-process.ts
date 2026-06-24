@@ -10,14 +10,12 @@ export const useDeleteMacroProcess = () => {
       await deleteMacroProcess(id);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["macroprocess-hierarchy"] });
       queryClient.invalidateQueries({ queryKey: ["macroprocesses"] });
-      queryClient.invalidateQueries({
-        queryKey: ["macroprocesses", "full"],
-      });
       toast.success("Macroprocesso apagado com sucesso!");
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message ?? "Erro ao criar o macro processo");
+      toast.error(error?.response?.data?.message ?? "Erro ao apagar o macro processo");
     },
   });
 };

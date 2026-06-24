@@ -18,9 +18,10 @@ import { useState } from "react";
 
 interface CreateMacroProcessDialogProps {
   yearId: number | null;
+  isExternal?: boolean;
 }
 
-export const CreateMacroProcessDialog = ({ yearId }: CreateMacroProcessDialogProps) => {
+export const CreateMacroProcessDialog = ({ yearId, isExternal }: CreateMacroProcessDialogProps) => {
   const [open, setOpen] = useState(false);
 
   const createMacroProcessMutation = useCreateMacroProcess();
@@ -50,11 +51,13 @@ export const CreateMacroProcessDialog = ({ yearId }: CreateMacroProcessDialogPro
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {!isExternal && (
       <DialogTrigger asChild>
         <Button disabled={!yearId}>
           <Plus /> Criar Macro Processo
         </Button>
       </DialogTrigger>
+    )}
       <DialogContent className="sm:max-w-sm">
         <form onSubmit={handleSubmit}>
           <DialogHeader>

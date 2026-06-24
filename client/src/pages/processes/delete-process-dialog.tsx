@@ -13,18 +13,18 @@ import { useDeleteProcess } from "@/hooks/use-delete-process";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  processId: number;
+  processYearId: number;
 }
 
-export const DeleteProcessDialog = ({ open, onOpenChange, processId }: Props) => {
+export const DeleteProcessDialog = ({ open, onOpenChange, processYearId }: Props) => {
   const deleteProcessMutation = useDeleteProcess();
 
   const handleDelete = () => {
-    deleteProcessMutation.mutate(processId, {
+    deleteProcessMutation.mutate(processYearId, {
       onSuccess: () => {
         onOpenChange(false);
       },
-      onError: (error: any) => {
+      onError: () => {
         onOpenChange(false);
       },
     });
@@ -52,4 +52,4 @@ export const DeleteProcessDialog = ({ open, onOpenChange, processId }: Props) =>
       </DialogContent>
     </Dialog>
   );
-};
+}

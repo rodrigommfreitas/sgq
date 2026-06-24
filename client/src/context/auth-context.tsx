@@ -1,11 +1,16 @@
-import React, {createContext, useContext, useState, useEffect} from 'react';
+import React, {createContext, useContext, useState, useEffect, useCallback} from 'react';
 import type {User} from '../types';
 import {apiLogout, refresh} from "@/api/auth.ts";
+import {setAuthToken} from "@/api/axios.ts";
+import {getMyYears} from "@/api/core.ts";
 
 interface AuthContextType {
     user: User | null;
     token: string | null;
-    login: (email: string) => Promise<void>;
+    roles: string[];
+    isExternal: boolean;
+    allowedYearIds: number[] | null;
+    isLoadingYears: boolean;
     setAuth: (data: { user: User; accessToken: string }) => void;
     logout: () => void;
     isLoading: boolean;
@@ -17,12 +22,36 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}) => {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [allowedYearIds, setAllowedYearIds] = useState<number[] | null>(null);
+    const [isLoadingYears, setIsLoadingYears] = useState(false);
+
+    const roles = user?.roles ?? [];
+    const isExternal = roles.includes("ROLE_EXTERNAL");
+
+    const fetchAllowedYears = useCallback(async () => {
+        setIsLoadingYears(true);
+        try {
+            const years = await getMyYears();
+            setAllowedYearIds(years.map(y => y.id));
+        } catch {
+            setAllowedYearIds([]);
+        } finally {
+            setIsLoadingYears(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isExternal && allowedYearIds === null && !isLoadingYears) {
+            fetchAllowedYears();
+        } else if (!isExternal) {
+            setAllowedYearIds(null);
+        }
+    }, [isExternal, allowedYearIds, isLoadingYears, fetchAllowedYears]);
 
     useEffect(() => {
         const checkSession = async () => {
             try {
-
                 const data = await refresh()
                 setAuth({
                     accessToken: data.accessToken,
@@ -31,6 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}
                         firstName: data.firstName,
                         lastName: data.lastName,
                         email: data.email,
+                        roles: data.roles ?? [],
                     },
                 })
             } catch (err) {
@@ -44,47 +74,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}
         checkSession()
     }, [])
 
-
-    const login = async (email: string) => {
-        setIsLoading(true);
-        // Simulate API Call
-        return new Promise<void>((resolve) => {
-            setTimeout(() => {
-                const mockUser: User = {
-                    id: 1,
-                    firstName: 'Demo',
-                    lastName: 'User',
-                    email: email,
-                    role: 'admin',
-                };
-                const mockToken = 'mock-jwt-token-xyz-123';
-
-                setUser(mockUser);
-                setToken(mockToken);
-
-                // In a real app, token goes to memory, refresh token to httpOnly cookie.
-                // For this demo persistence, we use localStorage.
-                localStorage.setItem('nexus_access_token', mockToken);
-                localStorage.setItem('nexus_user', JSON.stringify(mockUser));
-
-                setIsLoading(false);
-                resolve();
-            }, 1000);
-        });
-    };
-
     const setAuth = ({user, accessToken}: any) => {
         setUser(user)
         setToken(accessToken)
+        setAuthToken(accessToken)
     }
 
     const logout = async () => {
         try {
             await apiLogout();
         } catch (err: any) {
-            // even if backend fails, we still clear frontend state
         } finally {
             setAuth({user: null, accessToken: null});
+            setAuthToken(null);
+            setAllowedYearIds(null);
         }
     }
 
@@ -92,7 +95,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({children}
         <AuthContext.Provider value={{
             user,
             token,
-            login,
+            roles,
+            isExternal,
+            allowedYearIds,
+            isLoadingYears,
             setAuth,
             logout,
             isLoading,

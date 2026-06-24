@@ -4,8 +4,8 @@ import { getSystemPolicy, updateSystemPolicy, uploadSystemPolicyDocument } from 
 export default function SystemPolicyPage() {
   return (
     <SingletonDocumentPage
-      title="5.2. Política do Sistema e sua Divulgação"
-      descriptionLabel="Política da Qualidade"
+      title="Política do Sistema e sua Divulgação"
+      descriptionLabel="Intenções e compromissos globais da organização para a qualidade."
       descriptionPlaceholder="Descreva a política da qualidade..."
       emptyDescriptionText={'Nenhuma política definida. Clique em "Editar" para adicionar.'}
       documentCardTitle="Estado do Documento"
@@ -13,6 +13,7 @@ export default function SystemPolicyPage() {
       fetchFn={getSystemPolicy}
       updateFn={updateSystemPolicy}
       uploadFn={uploadSystemPolicyDocument}
+      entityType="SYSTEM_POLICY"
     />
   );
 }

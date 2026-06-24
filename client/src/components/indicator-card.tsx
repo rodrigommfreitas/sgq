@@ -1,9 +1,12 @@
+import { useState } from "react";
 import type { Indicator, IndicatorFrequency } from "@/types";
 import { InlineEdit } from "./inline-edit";
 import { Calculator, Unlink, User } from "lucide-react";
 import { MeasurementList } from "./measurement-list";
+import ConfirmDialog from "@/components/confirm-dialog";
 
 export const IndicatorCard: React.FC<{ indicator: Indicator }> = ({ indicator }) => {
+  const [confirmOpen, setConfirmOpen] = useState(false);
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden flex flex-col h-full">
       {/* Header / Main Info */}
@@ -42,16 +45,10 @@ export const IndicatorCard: React.FC<{ indicator: Indicator }> = ({ indicator })
                 <button
                   onClick={e => {
                     e.stopPropagation();
-                    if (
-                      confirm(
-                        "Are you sure you want to disassociate this indicator from this process?"
-                      )
-                    ) {
-                      //onRemove();
-                    }
+                    setConfirmOpen(true);
                   }}
                   className="ml-1 p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                  title="Disassociate from process"
+                  title="Desassociar do processo"
                 >
                   <Unlink size={16} />
                 </button>
@@ -105,6 +102,17 @@ export const IndicatorCard: React.FC<{ indicator: Indicator }> = ({ indicator })
           //onDelete={mid => onDeleteMeasurement(indicator.id, mid)}
         />
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Desassociar Indicador"
+        description="Tem a certeza que deseja desassociar este indicador do processo?"
+        confirmLabel="Desassociar"
+        onConfirm={() => {
+          //onRemove?.();
+        }}
+      />
     </div>
   );
 };

@@ -11,10 +11,7 @@ import {
   ShieldAlert,
   Target,
   RefreshCw,
-  User2,
   Building2,
-  Zap,
-  BookOpen,
   GraduationCap,
   Lightbulb,
   MessageSquare,
@@ -35,6 +32,8 @@ import {
   GalleryVerticalEnd,
   AudioWaveform,
   Command,
+  Network,
+  UserCog,
 } from "lucide-react";
 
 import { NavUser } from "@/components/nav-user";
@@ -85,6 +84,42 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavTitle teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
+        {(user?.roles?.includes("ROLE_SUPERADMIN") || user?.roles?.includes("ROLE_DEPARTMENT_MANAGER")) && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Plataforma</SidebarGroupLabel>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Departamentos">
+                  <Link to="/departamentos">
+                    <Network />
+                    <span>Departamentos</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {user?.roles?.includes("ROLE_SUPERADMIN") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Utilizadores">
+                    <Link to="/utilizadores">
+                      <UserCog />
+                      <span>Utilizadores</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {user?.roles?.includes("ROLE_SUPERADMIN") && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Anos">
+                    <Link to="/anos">
+                      <Calendar />
+                      <span>Anos</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup>
           <SidebarGroupLabel>4. Contexto da Organização</SidebarGroupLabel>
           <SidebarMenu>
@@ -161,7 +196,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="6.1. Riscos e Oportunidades">
-                <Link to="#">
+                <Link to="/riscos-oportunidades">
                   <ShieldAlert />
                   <span>6.1. Riscos e Oportunidades</span>
                 </Link>
@@ -169,7 +204,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="6.2. Objetivos do SG">
-                <Link to="#">
+                <Link to="/objetivos-sg">
                   <Target />
                   <span>6.2. Objetivos do SG</span>
                 </Link>
@@ -190,42 +225,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>7. Suporte</SidebarGroupLabel>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="7.1.2. Recursos - Pessoas">
-                <Link to="#">
-                  <User2 />
-                  <span>7.1.2. Recursos - Pessoas</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="7.1.3. Recursos - Infraestruturas e Ambiente">
-                <Link to="#">
+              <SidebarMenuButton asChild tooltip="7.1. Recursos">
+                <Link to="/recursos">
                   <Building2 />
-                  <span>7.1.3. Recursos - Infraestruturas e Ambiente</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="7.1.5. Recursos - EMM">
-                <Link to="#">
-                  <Zap />
-                  <span>7.1.5. Recursos - EMM</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="7.1.6. Recursos - Conhecimento Organizacional">
-                <Link to="#">
-                  <BookOpen />
-                  <span>7.1.6. Recursos - Conhecimento Organizacional</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="7.2. Competências">
-                <Link to="#">
-                  <GraduationCap />
-                  <span>7.2. Competências</span>
+                  <span>7.1. Recursos</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -239,17 +242,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="7.4. Comunicação">
-                <Link to="#">
+                <Link to="/comunicacao">
                   <MessageSquare />
                   <span>7.4. Comunicação</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="7.5. Informação Documentada">
-                <Link to="#">
-                  <FileStack />
-                  <span>7.5. Informação Documentada</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -260,50 +255,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>8. Operacionalização</SidebarGroupLabel>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="8.1. Planeamento">
-                <Link to="#">
-                  <Calendar />
-                  <span>8.1. Planeamento</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="8.2. Comunicação de produtos e serviços">
-                <Link to="#">
+              <SidebarMenuButton asChild tooltip="8.4.1. Avaliação de Fornecedores">
+                <Link to="/fornecedores-externos">
                   <Truck />
-                  <span>8.2. Comunicação de produtos e serviços</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="8.3. Design e Desenvolvimento">
-                <Link to="#">
-                  <PencilRuler />
-                  <span>8.3. Design e Desenvolvimento</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="8.4. Operacionalização">
-                <Link to="#">
-                  <Settings />
-                  <span>8.4. Operacionalização</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="8.5. Controlo dos Cursos">
-                <Link to="#">
-                  <ClipboardCheck />
-                  <span>8.5. Controlo dos Cursos</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="8.6. Libertação (aprovação)">
-                <Link to="#">
-                  <CheckCircle2 />
-                  <span>8.6. Libertação (aprovação)</span>
+                  <span>8.4.1. Avaliação de Fornecedores</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -317,13 +272,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuButton asChild tooltip="9.1. Indicadores de Desempenho">
                 <Link to="/indicadores">
                   <Gauge />
-                  <span>9.1. Indicadores de Desempenho</span>
+                  <span>9.1.1. Indicadores de Desempenho</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="9.1.2. Satisfação dos Estudantes">
-                <Link to="#">
+                <Link to="/satisfacao-estudantes">
                   <Smile />
                   <span>9.1.2. Satisfação dos Estudantes</span>
                 </Link>
@@ -331,34 +286,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="9.2. Auditorias">
-                <Link to="#">
-                  <Search />
+                <Link to="/auditorias">
+                  <ClipboardCheck />
                   <span>9.2. Auditorias</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="9.3. Revisão pela Gestão">
-                <Link to="#">
-                  <ClipboardList />
-                  <span>9.3. Revisão pela Gestão</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild tooltip="9.3. Revisão pela Gestão">
+          <Link to="/revisao-gestao">
+            <ClipboardList />
+            <span>9.3. Revisão pela Gestão</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupLabel>10. Melhoria</SidebarGroupLabel>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="10.1. Generalidades">
-                <Link to="#">
-                  <Info />
-                  <span>10.1. Generalidades</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton asChild tooltip="10.2. Tratamento de Não Conformidades">
                 <Link to="/non-conformities">
@@ -368,10 +315,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="10.3. Reclamações e Oportunidades de Melhoria">
-                <Link to="#">
+              <SidebarMenuButton asChild tooltip="10.3.1. Oportunidades de Melhoria">
+                <Link to="/oportunidades-melhoria">
                   <TrendingUp />
-                  <span>10.3. Reclamações e Oportunidades de Melhoria</span>
+                  <span>10.3.1. Oportunidades de Melhoria</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -45,6 +45,7 @@ onSuccess: (data) => {
                     firstName: data.firstName,
                     lastName: data.lastName,
                     email: data.email,
+                    roles: data.roles ?? [],
                 },
             })
         },

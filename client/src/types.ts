@@ -1,15 +1,151 @@
 import React from "react";
 
-export type NCStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED";
+export type NonConformityOrigin = "INTERNAL_AUDIT" | "CLIENT" | "EXTERNAL_AUDIT" | "NOT_SPECIFIED";
+export type NonConformityStatus = "OPEN" | "UNDER_TREATMENT" | "FINISHED" | "CLASSIFIED";
+export type CorrectiveActionStatus = "REGISTERED" | "IN_PROGRESS" | "FINISHED";
 
-export interface NonConformity {
+export interface CorrectiveActionResponse {
+  id: number;
   name: string;
-  origin: string;
-  evaluation: string;
-  comment: string;
-  actions: string;
-  status: NCStatus;
-  reportedAt: string; // ISO string
+  description: string | null;
+  responsible: UserSummary | null;
+  status: CorrectiveActionStatus;
+  progressDescription: string | null;
+  documents: DocumentWithVersionsResponse[];
+}
+
+export interface NonConformityYearResponse {
+  nonConformityYearId: number;
+  yearId: number;
+  year: number;
+  status: NonConformityStatus;
+  evaluation: string | null;
+  evaluationDescription: string | null;
+}
+
+export interface NonConformityResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  cause: string | null;
+  responsible: UserSummary | null;
+  origin: NonConformityOrigin;
+  department: DepartmentResponse | null;
+  years: NonConformityYearResponse[];
+  correctiveActions: CorrectiveActionResponse[];
+}
+
+export interface CreateNonConformityRequest {
+  name: string;
+  description?: string | null;
+  cause?: string | null;
+  responsibleId?: number | null;
+  departmentId?: number | null;
+  origin: NonConformityOrigin;
+  yearIds: number[];
+}
+
+export interface UpdateNonConformityRequest {
+  name?: string;
+  description?: string | null;
+  cause?: string | null;
+  responsibleId?: number | null;
+  departmentId?: number | null;
+  origin?: NonConformityOrigin;
+}
+
+export interface UpdateNonConformityYearRequest {
+  status?: NonConformityStatus;
+  evaluation?: string | null;
+  evaluationDescription?: string | null;
+}
+
+export interface CreateCorrectiveActionRequest {
+  name: string;
+  description?: string | null;
+  responsibleId?: number | null;
+}
+
+export interface UpdateCorrectiveActionRequest {
+  name?: string;
+  description?: string | null;
+  responsibleId?: number | null;
+  status?: CorrectiveActionStatus;
+  progressDescription?: string | null;
+}
+
+export type ImprovementOpportunityOrigin = "SUGGESTION" | "COMPLAINT" | "INTERNAL_AUDIT" | "EXTERNAL_AUDIT" | "MANAGEMENT_REVIEW" | "OTHER";
+export type ImprovementOpportunityStatus = "OPEN" | "UNDER_TREATMENT" | "FINISHED" | "CLASSIFIED";
+export type ImprovementActionStatus = "REGISTERED" | "IN_PROGRESS" | "FINISHED";
+
+export interface ImprovementActionResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  responsible: UserSummary | null;
+  status: ImprovementActionStatus;
+  progressDescription: string | null;
+  documents: DocumentWithVersionsResponse[];
+}
+
+export interface ImprovementOpportunityYearResponse {
+  improvementOpportunityYearId: number;
+  yearId: number;
+  year: number;
+  status: ImprovementOpportunityStatus;
+  evaluation: string | null;
+  evaluationDescription: string | null;
+}
+
+export interface ImprovementOpportunityResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  cause: string | null;
+  responsible: UserSummary | null;
+  origin: ImprovementOpportunityOrigin;
+  department: DepartmentResponse | null;
+  years: ImprovementOpportunityYearResponse[];
+  improvementActions: ImprovementActionResponse[];
+}
+
+export interface CreateImprovementOpportunityRequest {
+  name: string;
+  description?: string | null;
+  cause?: string | null;
+  responsibleId?: number | null;
+  departmentId?: number | null;
+  origin: ImprovementOpportunityOrigin;
+  yearIds: number[];
+}
+
+export interface UpdateImprovementOpportunityRequest {
+  name?: string;
+  description?: string | null;
+  cause?: string | null;
+  responsibleId?: number | null;
+  departmentId?: number | null;
+  origin?: ImprovementOpportunityOrigin;
+}
+
+export interface UpdateImprovementOpportunityYearRequest {
+  status?: ImprovementOpportunityStatus;
+  evaluation?: string | null;
+  evaluationDescription?: string | null;
+}
+
+export interface CreateImprovementActionRequest {
+  name: string;
+  description?: string | null;
+  responsibleId?: number | null;
+}
+
+export interface UpdateImprovementActionRequest {
+  name?: string;
+  description?: string | null;
+  responsibleId?: number | null;
+  status?: ImprovementActionStatus;
+  progressDescription?: string | null;
 }
 
 export interface User {
@@ -17,8 +153,7 @@ export interface User {
   firstName: string;
   lastName: string;
   email: string;
-  role?: "admin" | "editor" | "viewer";
-  avatar?: string;
+  roles: string[];
 }
 
 export interface AuthResponse {
@@ -27,6 +162,7 @@ export interface AuthResponse {
   lastName: string;
   email: string;
   accessToken: string;
+  roles: string[];
 }
 
 export interface NavItem {
@@ -45,7 +181,8 @@ export interface Measurement {
   indicatorId: string;
 }
 
-export type IndicatorFrequency = "ANNUAL" | "MONTHLY" | "SEMESTER" | "TRIMESTER";
+export type IndicatorFrequency = "ANNUAL" | "MONTHLY" | "SEMESTER" | "TRIMESTER" | "WEEKLY";
+export type IndicatorValueType = "NUMBER" | "PERCENTAGE" | "RATIO" | "TIME" | "CURRENCY";
 
 export interface Indicator {
   id: number;
@@ -56,10 +193,18 @@ export interface Indicator {
   measurements: Measurement[];
 }
 
+export interface DepartmentResponse {
+  id: number;
+  name: string;
+  userCount: number;
+}
+
 export interface Process {
   id: number;
   name: string;
   objective: string;
+  responsibles: UserSummary[];
+  departments: DepartmentResponse[];
 }
 
 export interface ProcessSummary extends Process {
@@ -81,6 +226,17 @@ export interface IndicatorProcess {
   macroProcessName: string;
 }
 
+export interface IndicatorWithProcesses extends Indicator {
+  processes: ProcessOptionResponse[];
+  owner: string;
+  indicatorYearId?: number;
+  indicatorId?: number;
+  goal?: number | null;
+  valueType?: string;
+  responsible?: UserSummary | null;
+  notes?: string | null;
+}
+
 export interface IndicatorSimple {
   id: number;
   name: string;
@@ -93,7 +249,10 @@ export interface IndicatorWithProcesses extends Indicator {
   owner: string;
   indicatorYearId?: number;
   indicatorId?: number;
-  goal?: number;
+  goal?: number | null;
+  valueType?: string;
+  responsible?: UserSummary | null;
+  notes?: string | null;
 }
 
 export interface IndicatorFullResponse extends Indicator {
@@ -136,7 +295,12 @@ export interface ProcessHierarchyItem {
   processId: number;
   name: string;
   objective: string;
-  owner: UserSummary | null;
+  entradasDocumentos: DocumentSummary[];
+  saidasDocumentos: DocumentSummary[];
+  fichaDocumento: DocumentSummary | null;
+  documents: DocumentSummary[];
+  responsibles: UserSummary[];
+  departments: DepartmentResponse[];
   indicators: IndicatorHierarchyResponse[];
   years: YearOption[];
   qualityObjectives: QualityObjectiveInfo[];
@@ -153,6 +317,14 @@ export interface MacroProcessHierarchyItem {
 export interface ProcessHierarchyResponse {
   macroProcesses: MacroProcessHierarchyItem[];
   standaloneProcesses: ProcessHierarchyItem[];
+}
+
+export interface UserManagementResponse {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  roles: string[];
 }
 
 /* SCOPE */
@@ -228,6 +400,79 @@ export interface AwarenessResponse {
   id: number;
   description: string | null;
   years: AwarenessYearDetail[];
+}
+
+/* MANAGEMENT REVIEW (9.3.1) */
+
+export interface ManagementReviewYearDetail {
+  managementReviewYearId: number;
+  yearId: number;
+  year: number;
+  documents: DocumentWithVersionsResponse[];
+}
+
+export interface ManagementReviewResponse {
+  id: number;
+  description: string | null;
+  years: ManagementReviewYearDetail[];
+}
+
+/* CUSTOMER SATISFACTION (9.1.2) */
+
+export interface CustomerSatisfactionYearDetail {
+  customerSatisfactionYearId: number;
+  yearId: number;
+  year: number;
+  documents: DocumentWithVersionsResponse[];
+}
+
+export interface CustomerSatisfactionResponse {
+  id: number;
+  description: string | null;
+  years: CustomerSatisfactionYearDetail[];
+}
+
+/* SUPPLIER (8.4.1) */
+
+export interface SupplierReviewResponse {
+  id: number;
+  rating: number;
+  text: string | null;
+  reviewDate: string;
+  documents: DocumentWithVersionsResponse[];
+}
+
+export interface SupplierResponse {
+  id: number;
+  name: string;
+  description: string | null;
+  contactInfo: string | null;
+  createdAt: string;
+  reviews: SupplierReviewResponse[];
+}
+
+export interface CreateSupplierRequest {
+  name: string;
+  description?: string | null;
+  contactInfo?: string | null;
+}
+
+export interface UpdateSupplierRequest {
+  name?: string | null;
+  description?: string | null;
+  contactInfo?: string | null;
+}
+
+export interface CreateSupplierReviewRequest {
+  rating: number;
+  text?: string | null;
+  reviewDate: string;
+}
+
+export interface UpdateSupplierReviewRequest {
+  rating?: number | null;
+  text?: string | null;
+  reviewDate?: string | null;
 }
 
 /* SWOT ANALYSIS (4.1) */
@@ -358,4 +603,398 @@ export interface UpdateInterestedPartyRequest {
   contactInfo?: string | null;
   needs?: string | null;
   communicationAndMonitoringPlan?: string | null;
+}
+
+/* QUALITY OBJECTIVES (6.2) */
+
+export type QualityObjectiveStatus = "ACHIEVED" | "IN_PROGRESS";
+
+export interface QualityObjectiveIndicatorResponse {
+  indicatorYearId: number;
+  indicatorId: number;
+  name: string;
+  formula: string;
+  frequency: IndicatorFrequency;
+  valueType: string;
+  responsible: UserSummary | null;
+  notes: string | null;
+  goal: number | null;
+  measurements: MeasurementResponseDTO[];
+}
+
+export interface QualityObjectiveResponse {
+  id: number;
+  qualityObjectiveYearId: number;
+  objectiveTitle: string;
+  description: string | null;
+  responsible: UserSummary | null;
+  yearId: number;
+  year: number;
+  status: QualityObjectiveStatus;
+  years: YearOption[];
+  processes: ProcessOptionResponse[];
+  indicators: QualityObjectiveIndicatorResponse[];
+}
+
+export interface CreateQualityObjectiveRequest {
+  objectiveTitle: string;
+  description?: string | null;
+  responsibleId?: number | null;
+  status?: QualityObjectiveStatus;
+  yearIds: number[];
+  processYearIds?: number[];
+  indicatorYearIds?: number[];
+}
+
+export interface UpdateQualityObjectiveRequest {
+  objectiveTitle?: string;
+  description?: string | null;
+  responsibleId?: number | null;
+  status?: QualityObjectiveStatus;
+  yearId?: number;
+  processYearIds?: number[];
+  indicatorYearIds?: number[];
+}
+
+export interface AssociateQualityObjectiveYearsRequest {
+  yearIds: number[];
+  copyProcessesAndIndicators: boolean;
+}
+
+/* RISKS & OPPORTUNITIES (6.1) */
+
+export type RiskOpportunityType = "RISK" | "OPPORTUNITY";
+export type RiskDecision = "ACCEPT" | "MITIGATE" | "TRANSFER" | "AVOID";
+export type ActionStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
+
+export interface RiskOpportunityResponse {
+  id: number;
+  riskOpportunityYearId: number;
+  code: string;
+  type: RiskOpportunityType;
+  origin: string;
+  description: string;
+  category: string;
+  yearId: number;
+  year: number;
+  impact: number | null;
+  probability: number | null;
+  riskLevel: number | null;
+  decision: RiskDecision | null;
+  processes: ProcessOptionResponse[];
+}
+
+export interface RiskOpportunityGroupedResponse {
+  risks: RiskOpportunityResponse[];
+  opportunities: RiskOpportunityResponse[];
+}
+
+export interface CreateRiskOpportunityRequest {
+  origin: string;
+  description: string;
+  category: string;
+  type: RiskOpportunityType;
+  yearIds: number[];
+  impact?: number | null;
+  probability?: number | null;
+  decision?: RiskDecision | null;
+  processYearIds?: number[] | null;
+}
+
+/* RESOURCES - INFRASTRUCTURE (7.1.3) */
+
+export interface InfrastructureResponse {
+  id: number;
+  name: string;
+  type: string;
+  location: string;
+  responsible: UserSummary | null;
+  maintenance: string;
+  yearId: number;
+  year: number;
+  isActive: boolean;
+  years: YearOption[];
+}
+
+export interface CreateInfrastructureRequest {
+  name: string;
+  type: string;
+  location: string;
+  responsibleId?: number | null;
+  maintenance: string;
+  isActive: boolean;
+  yearIds: number[];
+}
+
+export interface UpdateInfrastructureRequest {
+  name?: string;
+  type?: string;
+  location?: string;
+  responsibleId?: number | null;
+  maintenance?: string;
+  yearId?: number;
+  isActive?: boolean;
+}
+
+/* RESOURCES - EQUIPMENT (7.1.5) */
+
+export interface MaintenanceRecordResponse {
+  id: number;
+  date: string;
+  type: string;
+  performedBy: string;
+  description: string;
+}
+
+export interface CalibrationRecordResponse {
+  id: number;
+  date: string;
+  performedBy: string;
+  result: string;
+  description: string;
+}
+
+export interface EquipmentResponse {
+  id: number;
+  name: string;
+  type: string;
+  location: string;
+  responsible: UserSummary | null;
+  yearId: number;
+  year: number;
+  isActive: boolean;
+  years: YearOption[];
+  maintenanceHistory: MaintenanceRecordResponse[];
+  calibrationHistory: CalibrationRecordResponse[];
+}
+
+export interface CreateEquipmentRequest {
+  name: string;
+  type: string;
+  location: string;
+  responsibleId?: number | null;
+  isActive: boolean;
+  yearIds: number[];
+}
+
+export interface UpdateEquipmentRequest {
+  name?: string;
+  type?: string;
+  location?: string;
+  responsibleId?: number | null;
+  yearId?: number;
+  isActive?: boolean;
+}
+
+export interface CreateMaintenanceRecordRequest {
+  date: string;
+  type: string;
+  performedBy: string;
+  description: string;
+}
+
+export interface CreateCalibrationRecordRequest {
+  date: string;
+  performedBy: string;
+  result: string;
+  description: string;
+}
+
+/* HUMAN RESOURCES & COMPETENCIES (7.1.2) */
+
+export interface CompetencyResponse {
+  id: number;
+  name: string;
+  details: string;
+  document: DocumentWithVersionsResponse | null;
+}
+
+export interface HumanResourceResponse {
+  id: number;
+  name: string;
+  function: string;
+  department: string;
+  competencies: CompetencyResponse[];
+  yearId: number;
+  year: number;
+  isActive: boolean;
+  years: YearOption[];
+  hryId: number;
+}
+
+export interface CreateHumanResourceRequest {
+  name: string;
+  function: string;
+  department: string;
+  yearIds: number[];
+}
+
+export interface UpdateHumanResourceRequest {
+  name?: string;
+  function?: string;
+  department?: string;
+  yearId?: number;
+  isActive?: boolean;
+}
+
+/* COMMUNICATION (7.4) */
+
+export type CommunicationType = "INTERNAL" | "EXTERNAL";
+
+export interface CommunicationItemResponse {
+  id: number;
+  what: string;
+  who: string;
+  toWho: string;
+  when: string;
+  where: string;
+  how: string;
+  type: CommunicationType;
+  years: YearOption[];
+}
+
+export interface CommunicationResponse {
+  id: number;
+  objective: string;
+  scope: string | null;
+  plan: string | null;
+  internalItems: CommunicationItemResponse[];
+  externalItems: CommunicationItemResponse[];
+}
+
+export interface UpdateCommunicationRequest {
+  objective?: string;
+  scope?: string | null;
+  plan?: string | null;
+}
+
+export interface CreateCommunicationItemRequest {
+  what: string;
+  who: string;
+  toWho: string;
+  when: string;
+  where: string;
+  how: string;
+  type: CommunicationType;
+  yearIds?: number[];
+}
+
+export interface UpdateCommunicationItemRequest {
+  what?: string;
+  who?: string;
+  toWho?: string;
+  when?: string;
+  where?: string;
+  how?: string;
+  type?: string;
+}
+
+export interface UpdateRiskOpportunityRequest {
+  origin?: string;
+  description?: string;
+  category?: string;
+  yearId?: number;
+  impact?: number | null;
+  probability?: number | null;
+  decision?: RiskDecision | null;
+}
+
+export type AuditType = "INTERNAL" | "EXTERNAL";
+export type AuditStatus = "PLANNED" | "PLANNED_NOT_CONFIRMED" | "PLANNED_CONFIRMED" | "FINISHED" | "CANCELED";
+
+export interface DocumentSummary {
+  id: number;
+  fileName: string;
+  fileType: string;
+  fileUrl: string;
+  uploadedByFullName?: string;
+  uploadedAt?: string;
+}
+
+export interface AuditDocumentSummary {
+  id: number;
+  fileName: string;
+  fileType: string;
+  fileUrl: string;
+}
+
+export interface AuditResponse {
+  id: number;
+  name: string;
+  type: AuditType;
+  team: string | null;
+  notes: string | null;
+  responsible: UserSummary | null;
+  department: DepartmentResponse | null;
+  yearId: number;
+  year: number;
+  status: AuditStatus;
+  plannedDate: string | null;
+  documents: AuditDocumentSummary[];
+}
+
+export interface CreateAuditRequest {
+  name: string;
+  type: AuditType;
+  team?: string | null;
+  notes?: string | null;
+  responsibleId?: number | null;
+  departmentId?: number | null;
+  yearId: number;
+  status?: AuditStatus;
+  plannedDate?: string | null;
+}
+
+export interface UpdateAuditRequest {
+  name?: string;
+  type?: AuditType;
+  team?: string | null;
+  notes?: string | null;
+  responsibleId?: number | null;
+  departmentId?: number | null;
+  status?: AuditStatus;
+  plannedDate?: string | null;
+}
+
+export interface CreateExternalUserRequest {
+  email: string;
+  password: string;
+  confirmPassword: string;
+  firstName: string;
+  lastName: string;
+  yearIds: number[];
+}
+
+export interface ExternalUserResponse {
+  id: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  accessibleYears: number[];
+}
+
+export type EntityType =
+  | "MACRO_PROCESS" | "PROCESS" | "INDICATOR" | "MEASUREMENT"
+  | "NON_CONFORMITY" | "CORRECTIVE_ACTION" | "IMPROVEMENT_OPPORTUNITY" | "IMPROVEMENT_ACTION" | "INTERESTED_PARTY"
+  | "RISK_OPPORTUNITY" | "RISK_ACTION" | "SWOT_ANALYSIS" | "SWOT_ITEM"
+  | "COMMUNICATION" | "COMMUNICATION_ITEM" | "AWARENESS"
+  | "LEADERSHIP_COMMITMENT" | "RESPONSIBILITY_AUTHORITY"
+  | "QUALITY_OBJECTIVE" | "EQUIPMENT" | "CALIBRATION_RECORD"
+  | "MAINTENANCE_RECORD" | "HUMAN_RESOURCE" | "COMPETENCY"
+  | "INFRASTRUCTURE" | "CHANGE" | "SYSTEM_POLICY" | "DOCUMENT"
+  | "DOCUMENT_VERSION" | "SCOPE" | "AUDIT" | "CUSTOMER_SATISFACTION" | "SUPPLIER" | "SUPPLIER_REVIEW" | "MANAGEMENT_REVIEW";
+
+export type ActionType = "CREATED" | "UPDATED" | "DELETED" | "ASSOCIATED" | "DISASSOCIATED";
+
+export interface LogResponse {
+  id: number;
+  user: UserSummary | null;
+  timestamp: string;
+  entityType: EntityType;
+  baseEntityId: number | null;
+  entityYearId: number | null;
+  yearId: number | null;
+  entityName: string;
+  action: ActionType;
+  details: Record<string, unknown> | null;
 }

@@ -15,26 +15,29 @@ import { XCircle } from "lucide-react";
 interface MoveProcessDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  processId: number;
-  macroProcessId: number;
+  processYearId: number;
+  currentMacroProcessYearId: number | null;
+  yearId: number;
 }
 
 export const MoveProcessDialog = ({
   open,
   onOpenChange,
-  processId,
-  macroProcessId,
+  processYearId,
+  currentMacroProcessYearId,
+  yearId,
 }: MoveProcessDialogProps) => {
   const { data: macroProcesses, isLoading } = useQuery({
-    queryKey: ["macroprocesses"],
-    queryFn: getMacroProcesses,
+    queryKey: ["macroprocesses", yearId],
+    queryFn: () => getMacroProcesses(yearId),
+    enabled: !!yearId,
   });
 
   const moveProcessMutation = useMoveProcess();
 
-  const handleMove = (macroProcessId: number | null) => {
+  const handleMove = (targetMacroProcessYearId: number | null) => {
     moveProcessMutation.mutate(
-      { processId, macroProcessId },
+      { processYearId, targetMacroProcessYearId },
       {
         onSuccess: () => {
           onOpenChange(false);
@@ -62,7 +65,7 @@ export const MoveProcessDialog = ({
             </div>
           ) : (
             <>
-              {macroProcessId !== 0 && (
+              {currentMacroProcessYearId !== null && (
                 <Button
                   variant="outline"
                   className="justify-start gap-2 border-dashed"
@@ -81,13 +84,13 @@ export const MoveProcessDialog = ({
               )}
 
               {macroProcesses
-                ?.filter(mp => mp.id !== macroProcessId)
-                .map(mp => (
+                ?.filter((mp: any) => mp.macroProcessYearId !== currentMacroProcessYearId)
+                .map((mp: any) => (
                   <Button
-                    key={mp.id}
+                    key={mp.id ?? mp.macroProcessId}
                     variant="outline"
                     className="justify-start"
-                    onClick={() => handleMove(mp.id)}
+                    onClick={() => handleMove(mp.macroProcessYearId ?? mp.id)}
                     disabled={moveProcessMutation.isPending}
                   >
                     {mp.name}
@@ -99,4 +102,4 @@ export const MoveProcessDialog = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

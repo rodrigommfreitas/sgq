@@ -173,3 +173,69 @@
   }
 }
 
+/* Sonner toast styling */
+.cn-toast-success {
+  background: oklch(0.95 0.04 240) !important;
+  border-color: oklch(0.7123 0.1474 242.72) !important;
+  color: oklch(0.35 0.13 245) !important;
+}
+.cn-toast-success [data-icon] {
+  color: oklch(0.7123 0.1474 242.72) !important;
+}
+.cn-toast-error {
+  background: oklch(0.95 0.04 25) !important;
+  border-color: oklch(0.6434 0.2066 12.82) !important;
+  color: oklch(0.35 0.15 20) !important;
+}
+.cn-toast-error [data-icon] {
+  color: oklch(0.6434 0.2066 12.82) !important;
+}
+.cn-toast-warning {
+  background: oklch(0.96 0.04 85) !important;
+  border-color: oklch(0.75 0.15 80) !important;
+  color: oklch(0.35 0.1 75) !important;
+}
+.cn-toast-warning [data-icon] {
+  color: oklch(0.75 0.15 80) !important;
+}
+.cn-toast-info {
+  background: oklch(0.95 0.03 260) !important;
+  border-color: oklch(0.6 0.15 265) !important;
+  color: oklch(0.3 0.08 260) !important;
+}
+.cn-toast-info [data-icon] {
+  color: oklch(0.6 0.15 265) !important;
+}
+.dark .cn-toast-success {
+  background: oklch(0.25 0.06 240) !important;
+  border-color: oklch(0.7123 0.1474 242.72) !important;
+  color: oklch(0.92 0.05 240) !important;
+}
+.dark .cn-toast-success [data-icon] {
+  color: oklch(0.7123 0.1474 242.72) !important;
+}
+.dark .cn-toast-error {
+  background: oklch(0.25 0.06 20) !important;
+  border-color: oklch(0.6434 0.2066 12.82) !important;
+  color: oklch(0.92 0.05 25) !important;
+}
+.dark .cn-toast-error [data-icon] {
+  color: oklch(0.6434 0.2066 12.82) !important;
+}
+.dark .cn-toast-warning {
+  background: oklch(0.25 0.05 80) !important;
+  border-color: oklch(0.75 0.15 80) !important;
+  color: oklch(0.92 0.04 80) !important;
+}
+.dark .cn-toast-warning [data-icon] {
+  color: oklch(0.75 0.15 80) !important;
+}
+.dark .cn-toast-info {
+  background: oklch(0.25 0.05 260) !important;
+  border-color: oklch(0.6 0.15 265) !important;
+  color: oklch(0.92 0.04 260) !important;
+}
+.dark .cn-toast-info [data-icon] {
+  color: oklch(0.6 0.15 265) !important;
+}
+

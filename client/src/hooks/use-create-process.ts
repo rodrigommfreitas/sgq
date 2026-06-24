@@ -11,15 +11,11 @@ export const useCreateProcess = () => {
     onSuccess: () => {
       toast.success("Processo criado com sucesso!");
       queryClient.invalidateQueries({
-        queryKey: ["macroprocesses"],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ["macroprocesses", "full"],
+        queryKey: ["macroprocess-hierarchy"],
       });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? "Erro ao criar o macro processo");
+      toast.error(err?.response?.data?.message ?? "Erro ao criar o processo");
     },
   });
 };
