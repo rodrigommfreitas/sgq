@@ -13,6 +13,9 @@ export const useCreateMacroProcess = () => {
       queryClient.invalidateQueries({
         queryKey: ["macroprocess-hierarchy"],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["macroprocesses"],
+      });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message ?? "Erro ao criar o macro processo");
